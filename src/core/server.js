@@ -8,6 +8,8 @@ import { createDevServer } from "@kenjura/ursa/build";
 import { createSite } from "./site.js";
 import { startControlApi } from "../control/api.js";
 import { createAuth } from "../auth/index.js";
+import { hasRole } from "../auth/roles.js";
+import { mountEditor } from "../editor/index.js";
 
 export const VERSION = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version;
 
@@ -18,9 +20,8 @@ export const VERSION = JSON.parse(readFileSync(new URL("../../package.json", imp
  */
 export async function startServer(config, { print } = {}) {
   const out = print ?? ((l) => console.log(l));
-  if (config.roles.edit) out("⚠️  roles.edit: the editor is not implemented yet (docs/ROADMAP.md M4); ignoring");
-
-  const auth = config.auth ? createAuth(config.auth, { log: out }) : null;
+  const editing = config.roles.edit;
+  const auth = config.auth ? createAuth({ ...config.auth, editUrl: editing ? "/edit/" : null }, { log: out }) : null;
 
   const sites = new Map();
   for (const sc of config.sites) {
@@ -32,21 +33,39 @@ export async function startServer(config, { print } = {}) {
   if (config.roles.serve) {
     const site = sites.get(config.server.site ?? config.sites[0].id);
     const access = config.server.access;
+    // Tells Ursa's account.js where to sign in and edit (docs/AUTH.md)
+    const pageConfig = {
+      ...(auth ? { auth: "/auth", profile: "/auth/profile" } : {}),
+      ...(editing ? { edit: "/edit/" } : {}),
+    };
     devServer = createDevServer({
       outputDir: site.output,
       port: config.server.port,
       host: config.server.host,
       log: out,
-      mount: auth
-        ? (app) => {
-            auth.mount(app);
-            app.use(auth.requireRole(access));
-          }
-        : null,
+      headHtml: Object.keys(pageConfig).length
+        ? `<script type="application/json" id="ursa-server">${JSON.stringify(pageConfig).replace(/</g, "\\u003c")}</script>`
+        : "",
+      // Live reload is for people who may see the site
+      authorizeUpgrade: auth && access !== "public" ? (req) => hasRole(auth.userOf(req)?.roles, access) : null,
+      mount: (app) => {
+        if (auth) auth.mount(app);
+        if (editing) {
+          mountEditor(app, {
+            site,
+            auth,
+            scopes: config.auth?.scopes ?? {},
+            maxUploadBytes: config.editor.maxUploadMb * 1024 * 1024,
+            log: (m) => site.log.info(m),
+          });
+        }
+        if (auth) app.use(auth.requireRole(access));
+      },
     });
     site.attachDevServer(devServer);
     await devServer.listen();
     out(`🌐 Serving ${site.id} at http://${config.server.host}:${devServer.port}/${access === "public" ? "" : ` (sign-in required: ${access}; ${config.auth.provider.preset ?? config.auth.provider.issuer})`}`);
+    if (editing) out(`✏️  Editor at http://${config.server.host}:${devServer.port}/edit/${auth ? " (editors and admins)" : " (no sign-in: this machine only)"}`);
   }
 
   const control = config.control.enabled ? await startControlApi(sites, config.control, { version: VERSION, log: out }) : null;

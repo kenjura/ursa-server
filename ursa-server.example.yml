@@ -11,6 +11,7 @@ state-dir: ./.ursa-server          # build cache and deploy state; add it to .gi
 roles:
   watch: true                      # rebuild on every change
   serve: true                      # serve the built site with live reload
+  edit: true                       # edit it in the browser at /edit/ (editors and admins)
 
 server:
   host: 127.0.0.1                  # 0.0.0.0 to reach it from other machines (then set auth.base-url)
@@ -46,5 +47,5 @@ auth:
     client-secret: ${AUTH0_CLIENT_SECRET}
   roles:                                              # who gets in; higher roles include lower ones
     admin: ["${SITE_ADMIN_EMAIL}"]
-    # editor: ["*@example.com"]                       # anyone with a verified address at a domain
+    # editor: ["*@example.com"]                       # anyone with a verified address at a domain; may use /edit/
     viewer: []                                        # e.g. ["friend@example.com", "google-oauth2|1234…"]

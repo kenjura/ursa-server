@@ -52,7 +52,7 @@ export async function loadConfig(path, flags = {}, { env = process.env, warn = (
 /** Validate and fill defaults. Exported for tests and for programmatic use. */
 export function normalize(raw, flags = {}, { base = process.cwd(), cwd = process.cwd(), warn = (m) => console.warn(m) } = {}) {
   const v = new Validator(warn);
-  v.object(raw, "config", ["stateDir", "roles", "server", "control", "sites", "auth"]);
+  v.object(raw, "config", ["stateDir", "roles", "server", "control", "sites", "auth", "editor"]);
 
   const stateDir = resolvePath(flags.stateDir ?? v.string(raw.stateDir, "stateDir") ?? ".ursa-server", flags.stateDir ? cwd : base);
 
@@ -61,8 +61,13 @@ export function normalize(raw, flags = {}, { base = process.cwd(), cwd = process
   const roles = {
     watch: flags.watch ?? v.boolean(rolesRaw.watch, "roles.watch") ?? true,
     serve: flags.serve ?? v.boolean(rolesRaw.serve, "roles.serve") ?? false,
-    edit: v.boolean(rolesRaw.edit, "roles.edit") ?? false,
+    edit: flags.edit ?? v.boolean(rolesRaw.edit, "roles.edit") ?? false,
   };
+  if (roles.edit && !roles.serve) throw new ConfigError("roles.edit needs roles.serve: the editor is part of the served site");
+
+  const editorRaw = raw.editor ?? {};
+  v.object(editorRaw, "editor", ["maxUploadMb"]);
+  const editor = { maxUploadMb: v.integer(editorRaw.maxUploadMb, "editor.max-upload-mb") ?? 50 };
 
   const serverRaw = raw.server ?? {};
   v.object(serverRaw, "server", ["host", "port", "site", "access"]);
@@ -118,7 +123,15 @@ export function normalize(raw, flags = {}, { base = process.cwd(), cwd = process
     warn("config: auth is configured but server.access is public, so the site is served without sign-in");
   }
 
-  return { stateDir, roles, server, control, sites, auth };
+  if (roles.edit && !auth && !isLoopback(server.host)) {
+    throw new ConfigError(`roles.edit on ${server.host} without \`auth\` would let anyone who can reach it change the site: add auth, or use server.host: 127.0.0.1`);
+  }
+  if (roles.edit) {
+    const s = sites.find((x) => x.id === (server.site ?? sites[0].id));
+    if (s.source.type !== "fs") throw new ConfigError(`roles.edit: editing a "${s.source.type}" source isn't supported yet (fs only)`);
+  }
+
+  return { stateDir, roles, server, control, sites, auth, editor };
 }
 
 const MIN_SECRET = 32;
@@ -131,7 +144,7 @@ function normalizeAuth(a, server, v) {
   }
   const p = a.provider;
   if (!p) throw new ConfigError("auth.provider: required");
-  v.object(p, "auth.provider", ["type", "preset", "issuer", "domain", "clientId", "clientSecret", "scope", "region", "userPoolId"]);
+  v.object(p, "auth.provider", ["type", "preset", "issuer", "domain", "clientId", "clientSecret", "scope", "region", "userPoolId", "connection"]);
   const type = v.oneOf(p.type, "auth.provider.type", ["oidc"]) ?? "oidc";
   const preset = v.oneOf(p.preset, "auth.provider.preset", ["auth0", "google", "cognito"]) ?? null;
   if (!preset && !p.issuer) throw new ConfigError("auth.provider: give `preset` (auth0, google, cognito) or `issuer`");
@@ -160,7 +173,7 @@ function normalizeAuth(a, server, v) {
     baseUrl,
     sessionSecret: secret,
     sessionDays: v.integer(a.sessionDays, "auth.session-days") ?? 14,
-    provider: { type, preset, issuer: p.issuer ?? null, domain: p.domain ?? null, clientId: p.clientId, clientSecret: p.clientSecret, scope: p.scope ?? null, region: p.region, userPoolId: p.userPoolId },
+    provider: { type, preset, issuer: p.issuer ?? null, domain: p.domain ?? null, clientId: p.clientId, clientSecret: p.clientSecret, scope: p.scope ?? null, region: p.region, userPoolId: p.userPoolId, connection: v.string(p.connection, "auth.provider.connection") ?? null },
     roles: roleRules,
     scopes: a.scopes ?? {},
   };

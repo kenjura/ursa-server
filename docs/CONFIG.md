@@ -19,13 +19,16 @@ state-dir: ./.ursa-server        # caches and deploy state (default: .ursa-serve
 roles:
   watch: true                    # follow source changes (false: build once at startup)
   serve: false                   # dev server with live reload
-  edit: false                    # editor (not implemented yet)
+  edit: false                    # editor at /edit/ (needs serve; docs/EDITOR.md)
 
 server:                          # the dev server (roles.serve)
   host: 127.0.0.1
   port: 8080
   site: wiki                     # which site to serve (default: the first)
   access: public                 # public | viewer | editor | admin (needs `auth`)
+
+editor:
+  max-upload-mb: 50              # largest file the editor accepts
 
 control:                         # control API (docs/CONTROL.md)
   enabled: true
@@ -110,8 +113,10 @@ sink:
 ## Without a config file
 
 ```bash
-ursa-server start --source ./docs [--output ./site] [--meta ./meta] [--serve] [--port 8080] [--no-watch]
+ursa-server start --source ./docs [--output ./site] [--meta ./meta] [--serve] [--edit] [--port 8080] [--no-watch]
 ```
 
 One site, `fs` source, `fs` sink (`--output`, default `./output`). Paths are
-relative to the working directory.
+relative to the working directory. `--edit` (which implies `--serve`) adds
+the editor; without a config there's no sign-in, so it only works on
+localhost.

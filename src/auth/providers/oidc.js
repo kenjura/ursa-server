@@ -75,6 +75,21 @@ export function createOidcProvider(cfg, { redirectUri }) {
       };
     },
 
+    /**
+     * Auth0 username/password accounts: ask Auth0 to email a reset link.
+     * Only defined for the auth0 preset.
+     */
+    passwordReset: cfg.preset === "auth0"
+      ? async (email) => {
+          const res = await fetch(new URL("dbconnections/change_password", issuer), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ client_id: cfg.clientId, email, connection: cfg.connection ?? "Username-Password-Authentication" }),
+          });
+          if (!res.ok) throw new Error(`Auth0 said ${res.status}: ${(await res.text()).slice(0, 200)}`);
+        }
+      : null,
+
     /** Where to send the browser to end the provider's session too. */
     async logoutUrl(returnTo) {
       const c = await config();

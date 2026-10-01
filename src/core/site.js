@@ -10,9 +10,10 @@
 
 import { EventEmitter } from "events";
 import { join, resolve, dirname } from "path";
+import { existsSync } from "fs";
 import { mkdir } from "fs/promises";
 import { fileURLToPath } from "url";
-import { createBuild, createIgnoreFilter } from "@kenjura/ursa/build";
+import { createBuild, createIgnoreFilter, resolveUrlToOutput } from "@kenjura/ursa/build";
 import { sources, sinks } from "../adapters/index.js";
 import { DeployManifest } from "./manifest.js";
 import { deploy, reconcile } from "./deploy.js";
@@ -348,10 +349,45 @@ export async function createSite(config, { stateDir, watch = true, adapters = {}
 
   // ---- public --------------------------------------------------------------
 
+  /** The node id owning an output path, as "kind:key". */
+  function ownerOf(outRel) {
+    return build?.graph.ownerOfPath(outRel) ?? null;
+  }
+
   return {
     id,
     events,
     log,
+    source,
+    isIgnored,
+
+    /**
+     * Which source file a page URL is built from: { path } for a document,
+     * { dir } for a generated folder index, or null.
+     */
+    pageSource(urlPath) {
+      const outRel = resolveUrlToOutput(urlPath, (r) => existsSync(join(output, r)));
+      const owner = ownerOf(outRel);
+      if (!owner) return null;
+      const i = owner.indexOf(":");
+      const kind = owner.slice(0, i);
+      const key = owner.slice(i + 1);
+      if (kind === "pageHtml" || kind === "htmlPassthrough") return { path: key };
+      if (kind === "autoIndexPage" || kind === "dirListingHtml") return { dir: key };
+      return null;
+    },
+
+    /** The URL a source file's page is served at, if it has one. */
+    pageUrl(rel) {
+      if (!build) return null;
+      for (const kind of ["pageHtml", "htmlPassthrough"]) {
+        const owned = build.graph.ownedBy(`${kind}:${rel}`) ?? [];
+        const html = [...owned].filter((o) => o.endsWith(".html")).sort((a, b) => a.length - b.length)[0];
+        if (html) return "/" + html.replace(/(^|\/)index\.html$/, "$1").replace(/\.html$/, "");
+      }
+      return null;
+    },
+
     get output() {
       return output;
     },

@@ -15,6 +15,8 @@
 | Editor components | [pure-material-css](https://masquerade-circus.github.io/pure-material-css/) (the UI isn't React); a framework's Material set if that changes. |
 | Language | Plain ESM JavaScript with JSDoc, matching Ursa. |
 | HTTP framework | Express (Ursa's dev server is Express). |
+| Editor (0.2.0) | Plain-text CodeMirror with live preview; saves write the file only (no git); conflicts resolved in a merge view. |
+| Ursa account widget | Hidden on static sites; shown when ursa-server serves the page (it injects a config block), so S3 copies never show it. |
 
 ## Open
 
@@ -24,12 +26,15 @@
 2. **Dropbox / Google Drive as sinks?** Neither hosts websites, so only as
    backups. *Recommendation:* no.
 
-3. **Editor: plain text or WYSIWYG?** *Recommendation:* CodeMirror with live
-   preview; maybe WYSIWYG for `.md` later.
+3. **WYSIWYG for `.md`?** The editor is plain text with live preview. A
+   WYSIWYG mode could come later for Markdown only (MDX and wikitext don't
+   round-trip well).
 
-4. **Git?** Should editor saves become commits when the source is a repo?
-   *Recommendation:* not in the first editor; keep the write path open for a
-   `git` source type.
+4. **Git commits per save?** The wiki's source is a git repo. Options: a
+   commit per save (author = the signed-in user), a commit every N minutes,
+   or leave it to you. Would give history and undo in the editor.
+   *Recommendation:* commit per save, behind `editor.git: true`, pushed only
+   if you ask for it.
 
 5. **Google Docs in a Drive source:** ignore, or export to Markdown?
    *Recommendation:* ignore.

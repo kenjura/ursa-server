@@ -35,19 +35,24 @@ deploy is the next thing to try; `infra/local` has MinIO for a closer test.
 - `gdrive` source.
 - Push template-reconciliation writes back to the source (UPSTREAM.md #8).
 
-## M4: Editor
+## M4: Editor ✅ (0.2.0)
 
-- Edit API with conditional writes; `none` + `token` auth.
-- CodeMirror + Preact UI styled with pure-material-css: tree, editor, preview
-  iframe, upload, conflicts.
+- Edit API with conditional writes, path safety, per-user scopes, CSRF guard.
+- CodeMirror + Preact UI styled with pure-material-css: tree, editor, live
+  preview, uploads by drag and drop, rename/move/delete, merge view for
+  conflicts.
+- Ursa 0.104.0: the account widget and edit pencil on pages ursa-server
+  serves; live reload behind sign-in.
+- Next for the editor: per-save git commits (QUESTIONS.md), previewing
+  unsaved text (UPSTREAM.md #9), editing remote sources (with M3).
 
-## M5: Auth (started)
+## M5: Auth (mostly done)
 
 - ✅ Session layer (signed cookies), role rules.
 - ✅ `oidc` provider + **Auth0 preset**; gates the dev server (`server.access`).
-- Path scopes enforced by the editor; admin sessions for the control API.
-- Gate the live-reload WebSocket too (needs a `verifyClient` hook in Ursa's
-  `createDevServer`).
+- ✅ Path scopes enforced by the editor; live reload gated (Ursa 0.104.0).
+- ✅ Profile page, Auth0 password reset, Ursa's account widget.
+- Admin sessions for the control API.
 - Dropbox / Google login with optional pass-through.
 - AWS Identity Center / Cognito presets.
 - Passport adapter.

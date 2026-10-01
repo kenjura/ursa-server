@@ -36,6 +36,7 @@ export async function main(argv) {
         .option("output", { type: "string", describe: "With --source: build into this folder (default ./output)" })
         .option("meta", { type: "string", describe: "With --source: templates folder (default: Ursa's own)" })
         .option("serve", { type: "boolean", describe: "Serve the site with live reload" })
+        .option("edit", { type: "boolean", describe: "Serve the editor at /edit/ (implies --serve)" })
         .option("watch", { type: "boolean", describe: "Follow source changes (--no-watch builds once)" })
         .option("port", { type: "number", describe: "Dev server port" })
         .option("host", { type: "string", describe: "Dev server interface" })
@@ -114,7 +115,8 @@ async function start(a) {
     source: a.source,
     output: a.output,
     meta: a.meta,
-    serve: a.serve,
+    serve: a.edit ? true : a.serve,
+    edit: a.edit,
     watch: a.watch,
     port: a.port,
     host: a.host,

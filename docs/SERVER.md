@@ -45,3 +45,9 @@ covers both.
 
 Config: `roles.serve: true` (or `--serve`), `server.host`, `server.port`, and
 `server.site` to pick which site to serve (default: the first).
+
+Mounted on the same server, ahead of the site: `/auth/*` (sign-in, profile)
+when `auth` is set, and the editor at `/edit/` when `roles.edit` is on. Pages
+get a `script#ursa-server` block (Ursa's `headHtml` option) telling Ursa's
+account widget where those are; the live-reload WebSocket checks the session
+(Ursa's `authorizeUpgrade` option).

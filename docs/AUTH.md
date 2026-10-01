@@ -3,9 +3,10 @@
 Who may see the site preview, use the editor, and (remotely) the control API.
 
 **Implemented:** sign-in with any OpenID Connect provider, Auth0 preset
-first; signed session cookies; role rules; the dev server gated by
-`server.access`. **Not yet:** the editor (M4), the other providers below,
-per-path scopes (parsed, not enforced), admin sessions for the control API.
+first; signed session cookies; role rules; the site (and its live reload)
+gated by `server.access`; the editor gated to editors and admins, with
+per-path scopes; a profile page; Ursa's account widget. **Not yet:** the
+other providers below, admin sessions for the control API.
 
 ## Setting up Auth0
 
@@ -36,6 +37,25 @@ Then `ursa-server start`, open `http://localhost:8080/` (the same host name
 as `base-url`; cookies don't carry between `localhost` and `127.0.0.1`), and
 you're sent to Auth0. `/auth/me` shows who you're signed in as and your
 roles; `/auth/logout` signs out here and at Auth0.
+
+## On the site: the account widget
+
+With Ursa ≥ 0.104.0, pages served by ursa-server show an account button in
+the topbar (static copies of the site, e.g. on S3, don't). Its panel shows
+who is signed in, with links to the profile page and to sign out. Editors and
+admins also get a pencil in the topbar that opens the current page in the
+editor. ursa-server turns this on by adding a small JSON block to each page
+it serves (`script#ursa-server`; see Ursa's docs/LIBRARY.md).
+
+## Profile page
+
+`/auth/profile` shows your name, email, access level, how long you stay
+signed in, and your account id (handy for `auth.roles`). For Auth0
+username/password accounts it has **Email me a password reset link**, which
+asks Auth0 to send its reset email. That uses the
+`Username-Password-Authentication` connection unless
+`auth.provider.connection` names another. Names, emails and sign-in methods
+are managed in Auth0 itself.
 
 Sign-out at Auth0 uses its OIDC end-session endpoint when the tenant
 advertises one, otherwise `/v2/logout`. Both need the Allowed Logout URL.
@@ -73,9 +93,20 @@ no rule is refused at sign-in and gets no session. Sessions are stateless
 (signed cookies): changing `session-secret` signs everyone out, and role
 changes apply at the next sign-in.
 
-**Limitation:** the live-reload WebSocket (`/__ursa/ws`) isn't behind
-sign-in. It carries only "reload" notices, never page content, but an
-anonymous client could see that the site changed.
+The live-reload WebSocket (`/__ursa/ws`) follows `server.access` too: a
+browser without a qualifying session can't connect.
+
+**Scopes** limit what an editor may change (admins are never limited):
+
+```yaml
+auth:
+  scopes:
+    friend@example.com: ["campaigns/bertball/**"]
+    auth0|65f0c1: ["campaigns/**", "index.md"]
+```
+
+`**` matches any number of folders, `*` part of one name. Keys are verified
+emails or account ids. An editor without an entry may change everything.
 
 ## Requirements
 
@@ -114,7 +145,7 @@ auth:
   roles:
     admin:  ["andrew@kenjura.com"]
     editor: ["*@kenjura.com", "github|12345"]
-  scopes:                       # optional per-user path limits (editor; not enforced yet)
+  scopes:                       # optional per-user path limits for editors
     "friend@example.com": ["campaigns/bertball/**"]
 ```
 

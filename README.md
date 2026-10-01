@@ -8,20 +8,21 @@ people a web UI to edit it.
 
 It's meant for a machine that stays on: a home server, an EC2 instance, a VPS.
 
-**Status:** M1 and M2 of the [roadmap](docs/ROADMAP.md) are built, plus
-Auth0 sign-in. It watches a local folder, rebuilds incrementally with Ursa,
-and deploys only changed files to a local folder, an S3-compatible bucket
-(with CloudFront invalidation) or a server over rsync. The served site can
-require an Auth0 (or any OIDC) sign-in. There's a control API and CLI. Remote
-sources (S3, Dropbox, Google Drive) and the editor come next.
+**Status (0.2.0):** it watches a local folder, rebuilds incrementally with
+Ursa, and deploys only changed files to a local folder, an S3-compatible
+bucket (with CloudFront invalidation) or a server over rsync. The served site
+can require an Auth0 (or any OIDC) sign-in, and signed-in editors can change
+the site in the browser at `/edit/`. There's a control API and CLI. Remote
+sources (S3, Dropbox, Google Drive) come next. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start
 
-Requires Node 24+ and `@kenjura/ursa` ≥ 0.103.0.
+Requires Node 24+ and `@kenjura/ursa` ≥ 0.104.0.
 
 ```bash
 npm install
 npx ursa-server start --source ./docs --output ./site --serve   # dev: watch, build, serve with live reload
+npx ursa-server start --source ./docs --output ./site --edit    # …and edit in the browser at /edit/ (localhost only)
 ```
 
 From a config file: start from [ursa-server.example.yml](ursa-server.example.yml)
@@ -64,7 +65,7 @@ pnpm test
 |---|---|---|---|
 | **Watcher** | Watches a source for changes, rebuilds only what changed using Ursa's incremental build graph, and deploys the delta to a sink. Has a control API and CLI for status, cache invalidation and full rebuilds. | fs source; fs, s3, rsync sinks | [WATCHER.md](docs/WATCHER.md), [CONTROL.md](docs/CONTROL.md) |
 | **Server** | Serves the built site over HTTP with live reload, optionally behind Auth0 sign-in. Mainly for development and previews. | Done | [SERVER.md](docs/SERVER.md), [AUTH.md](docs/AUTH.md) |
-| **Editor** | A web UI for editing the source files, behind Auth0 (and other providers). Edits are written back through the source adapter, so the watcher picks them up like any other change. | Designed | [EDITOR.md](docs/EDITOR.md), [AUTH.md](docs/AUTH.md) |
+| **Editor** | A web UI for editing the source files, behind Auth0 (and other providers). Edits are written back through the source adapter, so the watcher picks them up like any other change. | `fs` sources | [EDITOR.md](docs/EDITOR.md), [AUTH.md](docs/AUTH.md) |
 
 ```
              ┌──────────── ursa-server ─────────────┐
@@ -108,8 +109,8 @@ src/
     source/   fs (s3, dropbox, gdrive: M3)
     sink/     fs, s3, rsync
   control/    control API (HTTP + SSE, TCP and Unix socket)
-  editor/     editor API and UI (M4)
-  auth/       auth providers (M5)
+  editor/     editor API (api.js) and UI (ui/: Preact + CodeMirror, built to ui/dist)
+  auth/       sign-in (OIDC/Auth0), sessions, roles, profile page
   util/
 test/         node:test suites (`npm test`)
 infra/

@@ -23,6 +23,16 @@ except the hot-reload change, which is internal to `ursa serve`. See Ursa's
    module, with a `mount(app)` hook for extra routes. Its WebSocket moved from
    port+1 to `/__ursa/ws` on the same port, so it works behind a proxy.
 
+## Done in Ursa 0.104.0 (branch `version/0.104.0`)
+
+ursa-server 0.2.0 requires `@kenjura/ursa` ≥ 0.104.0.
+
+- **Account widget:** hidden unless the page carries a `script#ursa-server`
+  block; then sign in/out, profile and an edit pencil for editors.
+- **`createDevServer({ headHtml, authorizeUpgrade })`:** add that block to
+  served pages; refuse live-reload sockets without a session.
+- **`outputPathFor`** exported.
+
 ## Still wanted
 
 6. **Optional build stamp.** Every page's footer carries the build number and
