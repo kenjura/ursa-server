@@ -93,7 +93,7 @@ export function createAuth(config, { log = console.log, provider = null } = {}) 
         }
         const roles = rolesFor(who, config.roles);
         if (roles.length === 0) {
-          log(`sign-in refused: ${who.email ?? who.sub} has no role`);
+          log(`sign-in refused: ${who.email ?? "(no email)"} [${who.sub}] has no role${who.email && !who.emailVerified ? " (email not verified, so email rules don't apply)" : ""}`);
           res.setHeader("Set-Cookie", clearTx);
           return page(res, 403, "No access", `<p>You signed in as <b>${esc(who.email ?? who.sub)}</b>${who.email && !who.emailVerified ? " (email not verified)" : ""}, which doesn't have access here.</p><p><a href="/auth/logout">Sign out</a></p>`);
         }
