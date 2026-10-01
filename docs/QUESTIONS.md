@@ -1,70 +1,45 @@
-# Open questions
+# Decisions and open questions
 
-Each has a recommendation; the docs are written assuming it. Answer, or
-accept the default.
+## Decided (2026-09-30)
 
-## Scope and deployment
+| Question | Decision |
+|---|---|
+| Change Ursa? | Yes, on a version branch: `version/0.103.0` ([UPSTREAM.md](UPSTREAM.md)). |
+| Where does it run? | An always-on machine: home server, EC2, VPS. Infra ships a systemd unit and a Dockerfile; no serverless. |
+| Rsync sink? | Yes, built. |
+| Primary deployment | Server holds credentials and pushes to an S3 bucket behind CloudFront; editors sign in with Auth0 and have no AWS credentials of their own. |
+| Bundled auth | Auth0, as an `oidc` preset. |
+| Passport | Adapter only; OIDC is the core. |
+| License, git identity | Match Ursa: ISC; Andrew London. |
+| Ursa dependency | npm, `^0.103.0`. For development, `npm run link-ursa` installs `../ursa` in its place. |
+| Editor components | [pure-material-css](https://masquerade-circus.github.io/pure-material-css/) (the UI isn't React); a framework's Material set if that changes. |
+| Language | Plain ESM JavaScript with JSDoc, matching Ursa. |
+| HTTP framework | Express (Ursa's dev server is Express). |
 
-1. **Where will this run?** An always-on VM (like the box `ursa/deploy.sh`
-   targets), a container platform (Fly, ECS/Fargate, Cloud Run), or
-   serverless?
-   *Recommendation:* always-on container or VM with a persistent volume. The
-   watchers long-poll and the cache wants a disk; serverless fights both.
-   This decides what goes in `infra/`.
+## Open
 
-2. **One site or many per server?**
-   *Recommendation:* config is plural from day one, MVP runs one.
+1. **One site or many per server?** Supported (sites build one after
+   another), but is it needed? If not, the config could be simplified.
 
-3. **Are Dropbox / Google Drive needed as *sinks*?** Neither can host a
-   website, so they'd only be backups/exports.
-   *Recommendation:* sources only for now; `rsync` and `s3` as the remote
-   sinks.
+2. **Dropbox / Google Drive as sinks?** Neither hosts websites, so only as
+   backups. *Recommendation:* no.
 
-## Ursa
+3. **Editor: plain text or WYSIWYG?** *Recommendation:* CodeMirror with live
+   preview; maybe WYSIWYG for `.md` later.
 
-4. **OK to make the changes in [UPSTREAM.md](UPSTREAM.md) to Ursa?** Items 1-2
-   are needed for a clean M1; the alternative is importing Ursa's internal
-   files, which breaks on any refactor.
-   *Recommendation:* yes, as a minor Ursa release before M1.
+4. **Git?** Should editor saves become commits when the source is a repo?
+   *Recommendation:* not in the first editor; keep the write path open for a
+   `git` source type.
 
-5. **How should ursa-server depend on Ursa:** the published
-   `@kenjura/ursa` from npm, or a local link while both change together?
-   *Recommendation:* `file:../ursa` link during M1-M2, npm semver range after.
+5. **Google Docs in a Drive source:** ignore, or export to Markdown?
+   *Recommendation:* ignore.
 
-## Editor
+6. **Who edits?** *Assumed:* a few trusted people, optional per-folder scopes,
+   user management in Auth0 rather than in the app.
 
-6. **Plain-text editor, or WYSIWYG?** MDX and wikitext make WYSIWYG hard to
-   do faithfully.
-   *Recommendation:* CodeMirror source editor with live preview. Revisit
-   WYSIWYG for `.md` only, later.
+7. **Ursa build stamp** (UPSTREAM.md #6): worth adding an option so forced
+   rebuilds don't re-upload every page?
 
-7. **Git?** If a source is a git repo (a local folder, or a mirror), should
-   editor saves become commits, and should the editor show history?
-   *Recommendation:* not in MVP; design the write path so a `git` source
-   adapter (commit on write, pull on watch) can be added as a source type.
-
-8. **Google Docs in a Drive source:** ignore native Docs, or export them
-   to Markdown?
-   *Recommendation:* ignore in MVP (only real files are sources).
-
-9. **Who edits?** Just you, a few trusted people, or a broader group needing
-   per-folder permissions?
-   *Recommendation:* design for a few trusted people with optional path
-   scopes (already in [AUTH.md](AUTH.md)); no in-app user management.
-
-## Auth
-
-10. **Bundled scheme: Auth0 or Clerk** (or something else)?
-    *Recommendation:* Auth0 through a generic OIDC provider; see
-    [AUTH.md](AUTH.md#bundled-scheme-auth0-recommended-via-the-oidc-provider).
-
-11. **Passport:** core, or adapter only?
-    *Recommendation:* adapter only; OIDC is the core.
-
-## Implementation
-
-12. **JavaScript or TypeScript?**
-    *Recommendation:* plain ESM JavaScript with JSDoc, matching Ursa. The
-    scaffold is written that way.
-
-13. **License?** Ursa is ISC. *Recommendation:* ISC. Scaffold uses it.
+8. **Publishing Ursa 0.103.0.** The branch is committed but not tagged or
+   pushed (pushing a `v*` tag publishes to npm). Until it's published,
+   `npm install` here needs `npm run link-ursa`.

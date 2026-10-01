@@ -1,14 +1,13 @@
-stateDir: /data
-roles: { watch: true, serve: true, edit: true }
+state-dir: /data
+roles: { watch: true, serve: true }
 server: { host: 0.0.0.0, port: 8080 }
-control: { host: 0.0.0.0, port: 7071, token: dev-token }
+control: { host: 0.0.0.0, port: 7071, token: "${URSA_SERVER_TOKEN}" }
 sites:
   - id: dev
-    source: { type: s3, bucket: ursa-src, poll: 5s }
-    sink: { type: s3, bucket: ursa-site }
-auth:
-  providers:
-    - { type: token, tokens: [dev-token] }
-  roles:
-    admin: ["*"]
-    editor: ["*"]
+    source: { type: fs, path: /docs }
+    sink:
+      type: s3
+      bucket: ursa-site
+      endpoint: http://minio:9000
+      force-path-style: true
+      region: us-east-1

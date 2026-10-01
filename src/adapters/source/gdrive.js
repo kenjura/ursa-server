@@ -1,6 +1,6 @@
-/** `gdrive` source adapter. docs/WATCHER.md#source-modes. */
+/** `gdrive` source adapter. Planned for M3; see docs/WATCHER.md#source-modes and docs/ROADMAP.md. */
 
 /** @returns {import("../types.js").SourceAdapter} */
-export function createGDriveSource(config) {
-  throw new Error("gdrive source: not implemented");
+export function createGDriveSource() {
+  throw new Error("source type \"gdrive\" is not implemented yet (planned: docs/ROADMAP.md M3)");
 }

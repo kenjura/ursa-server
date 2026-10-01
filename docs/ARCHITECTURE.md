@@ -37,11 +37,12 @@ source adapter ──events──▶ working copy (local dir) ──▶ runPass(
    batch (same debounce as Ursa: 500 ms quiet / 2000 ms max), invalidates them
    in the graph and calls `runPass()`.
 3. Ursa writes into a local **staging output** directory and reports which
-   output paths it wrote and deleted (this needs a small upstream change;
-   see [UPSTREAM.md](UPSTREAM.md)).
+   output paths it wrote and deleted (`onOutputWrite` / `writtenPaths`, added
+   in Ursa 0.103.0; see [UPSTREAM.md](UPSTREAM.md)).
 4. **Sink adapter** pushes exactly those paths. A **deploy manifest**
-   (output path → content hash of what the sink holds) filters out writes whose
-   bytes didn't change, so a forced full rebuild deploys almost nothing.
+   (output path → MD5 of what the sink holds) filters out writes whose bytes
+   didn't change, so a forced full rebuild re-uploads only pages (which carry
+   Ursa's build stamp in the footer), never unchanged assets.
 
 For a local-FS sink, the staging output is the sink and step 4 is a no-op.
 
@@ -83,8 +84,9 @@ copy, cache and build. The MVP runs one; the shape is plural from day one so
 the control API's URLs (`/sites/:id/...`) don't change later.
 
 Ursa's build uses module-level state in a few places (the parser pool, the
-profiler), so multiple sites in one process may need to be **one worker
-thread per site**. To be verified when multi-site is built.
+profiler). Several sites in one process work in the tests, but sites build one
+after another, not in parallel. If that becomes a bottleneck, the fix is one
+worker thread per site.
 
 ## State on disk
 
@@ -93,12 +95,14 @@ All under a single state directory (`stateDir`, default `./.ursa-server/`):
 ```
 .ursa-server/
   sites/<id>/
-    work/          working copy (remote sources only)
-    work/.ursa/    Ursa's build graph (lives in the docroot today; see UPSTREAM.md)
-    out/           staging output
-    deploy.json    deploy manifest: what the sink currently holds
-    source.json    source cursor: S3 queue position / Dropbox cursor / Drive page token
+    cache/         Ursa's build cache (graph.json, cache stamp, build id), via createBuild({ cacheDir })
+    out/           staging output (absent for an fs sink: the site is built in place)
+    deploy.json    deploy manifest: what the sink holds, plus paths awaiting retry
+    work/          working copy (remote sources only; M3)
+    source.json    source cursor: S3 queue position / Dropbox cursor / Drive page token (M3)
 ```
+
+Nothing is written into the source folder.
 
 This directory is the "persistent Ursa cache". Losing it is safe: the next
 start is a cold build and a full manifest reconciliation (see
@@ -108,10 +112,12 @@ start is a cold build and a full manifest reconciliation (see
 
 - **Node 24, plain ESM JavaScript with JSDoc types**, matching Ursa. Ursa is
   imported as a library (`@kenjura/ursa`), not shelled out to.
-- **HTTP:** Fastify for the control and editor APIs (schemas, good plugin
-  story for auth). Ursa already uses Express for `serve`; the static server
-  can reuse Ursa's directly (see [SERVER.md](SERVER.md)).
+- **HTTP:** Express throughout. The dev server is Ursa's own
+  (`createDevServer`, also Express), and the editor will mount onto it, so a
+  second framework would buy nothing.
 - **Storage SDKs:** `@aws-sdk/client-s3` (+ `client-sqs`) for any
   S3-compatible store (AWS, R2, B2, MinIO), `dropbox`, `googleapis`.
 - **Editor UI:** CodeMirror 6 plus a small amount of Preact, built with
-  esbuild (already a dependency of Ursa). No SPA framework.
+  esbuild (already a dependency of Ursa), styled with
+  [pure-material-css](https://masquerade-circus.github.io/pure-material-css/).
+  See [EDITOR.md](EDITOR.md#ui-delivery).

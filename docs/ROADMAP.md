@@ -2,30 +2,30 @@
 
 Ordered so each milestone is usable on its own.
 
-## M0: Scaffold (this commit)
+## M0: Scaffold ✅
 
-Docs, directory layout, stub modules, infra skeleton.
+Docs, layout, infra skeleton.
 
-## M1: Local loop
+## M1: Local loop ✅
 
-- Ursa upstream changes 1 and 2 ([UPSTREAM.md](UPSTREAM.md)).
+- Ursa 0.103.0: written/deleted paths, `cacheDir`, `invalidate`, exported
+  build and dev server ([UPSTREAM.md](UPSTREAM.md)).
 - Config loading and validation.
-- Site runtime with `fs` source and `fs` sink: effectively `ursa serve`
-  driven as a library.
-- Built-in server with live reload (reusing Ursa's).
-- Control API: `status`, `rebuild`, `invalidate`, `health`; CLI client.
+- Site runtime with `fs` source and `fs` sink; the build cache lives in the
+  state dir, not the source.
+- Dev server with live reload (Ursa's).
+- Control API (TCP + Unix socket, token auth) and CLI: status, rebuild,
+  invalidate, sync, pause/resume, logs, events.
 
-**Done when:** `ursa-server start` on a local folder behaves like
-`ursa serve`, and `ursa-server status` / `rebuild` work against it.
+## M2: Remote sinks ✅
 
-## M2: Remote sinks
-
-- Deploy manifest and reconciliation.
-- `s3` sink (with MinIO in `infra/local` for tests), CloudFront invalidation.
+- Deploy manifest, pending/retry, startup and post-rebuild reconciliation.
+- `s3` sink with CloudFront invalidation (works with R2/B2/MinIO).
 - `rsync` sink (retires `ursa/deploy.sh`).
 
-**Done when:** edit locally, site appears in a bucket, and a forced rebuild
-uploads only files whose bytes changed.
+**Not yet verified against real AWS or a real SSH host:** the S3 sink is
+tested with a stubbed client and rsync against a local folder. The first real
+deploy is the next thing to try; `infra/local` has MinIO for a closer test.
 
 ## M3: Remote sources
 
@@ -33,24 +33,24 @@ uploads only files whose bytes changed.
 - `s3` source: polling, then SQS notifications.
 - `dropbox` source.
 - `gdrive` source.
-- Ursa upstream change 3 (cache dir).
+- Push template-reconciliation writes back to the source (UPSTREAM.md #8).
 
 ## M4: Editor
 
 - Edit API with conditional writes; `none` + `token` auth.
-- CodeMirror UI: tree, editor, preview iframe, upload, conflicts.
+- CodeMirror + Preact UI styled with pure-material-css: tree, editor, preview
+  iframe, upload, conflicts.
 
 ## M5: Auth
 
 - Session layer, role/scope config.
-- `oidc` provider + Auth0 preset (the bundled scheme).
+- `oidc` provider + **Auth0 preset** (the bundled scheme; first).
 - Dropbox / Google login with optional pass-through.
 - AWS Identity Center / Cognito presets.
 - Passport adapter.
 
 ## M6: Production hardening
 
-- Terraform reference deployment ([infra/terraform](../infra/terraform)).
-- State snapshot to bucket for ephemeral hosts.
-- Multi-site.
+- State snapshot to a bucket for hosts without a persistent disk.
 - Metrics (Prometheus endpoint), structured logs.
+- Terraform for the AWS side (bucket, CloudFront, IAM), if wanted.

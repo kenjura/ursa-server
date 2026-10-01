@@ -31,13 +31,16 @@ The **staging output** (the local build), not the sink. That means:
   as `viewedOutputs` so those pages build first, and the client reloads when
   its page changes.
 - `Cache-Control: no-store` (as Ursa's serve does).
-- Optional: put the server behind the editor's auth (`server.auth: true`) for
-  private previews.
+- Later: put the server behind the editor's auth for private previews.
 
-## Recommendation: reuse Ursa's server
+## Implementation: Ursa's own server
 
-`ursa/src/serve.js` already has `serveFiles()` (Express + compression + the
-WebSocket live-reload server) and the viewed-page bookkeeping. Rather than
-rewriting it, export it from Ursa (see [UPSTREAM.md](UPSTREAM.md)) and mount
-it. The only new code here is wiring the runtime's batch events to its
-notify functions.
+Ursa 0.103.0 exports `createDevServer` from `@kenjura/ursa/build` (Express +
+compression + live reload). ursa-server creates one over the served site's
+staging output and routes that site's passes through it, so browsers viewing
+a page get it rebuilt first and reload when it changes. The live-reload
+WebSocket is at `/__ursa/ws` on the same port, so one reverse-proxy rule
+covers both.
+
+Config: `roles.serve: true` (or `--serve`), `server.host`, `server.port`, and
+`server.site` to pick which site to serve (default: the first).

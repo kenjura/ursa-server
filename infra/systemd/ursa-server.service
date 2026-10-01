@@ -1,0 +1,27 @@
+[Unit]
+Description=ursa-server: continuously build and deploy Ursa sites
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ursa
+Group=ursa
+WorkingDirectory=/var/lib/ursa-server
+EnvironmentFile=-/etc/ursa-server/env
+ExecStart=/usr/bin/env ursa-server start /etc/ursa-server/ursa-server.yml
+# SIGTERM lets the current build and deploy finish before exiting
+KillSignal=SIGTERM
+TimeoutStopSec=90
+Restart=on-failure
+RestartSec=5
+
+# Hardening: it only needs its state dir and the source folders it reads
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/ursa-server
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

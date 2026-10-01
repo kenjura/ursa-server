@@ -5,35 +5,34 @@
  */
 
 /**
- * @typedef {object} SourceEntry
- * @property {string} path
- * @property {string} hash
- * @property {number} size
- * @property {number} mtime
- */
-
-/**
+ * A source keeps a local folder (the working copy) equal to wherever the
+ * site's files live, and reports changes in it. For `fs` the working copy is
+ * the source itself.
+ *
  * @typedef {object} SourceAdapter
  * @property {string} id
- * @property {{ push: boolean, conditionalWrite: boolean, rename: boolean }} capabilities
- * @property {(state: object | null) => Promise<void>} init - restore cursor
- * @property {() => Promise<SourceEntry[]>} list
- * @property {(path: string) => Promise<Buffer>} read
- * @property {(path: string, bytes: Buffer, opts?: { ifMatch?: string }) => Promise<SourceEntry>} write
- * @property {(path: string, opts?: { ifMatch?: string }) => Promise<void>} remove
- * @property {(from: string, to: string) => Promise<void>} rename
- * @property {(onChanges: (events: { path: string }[]) => void) => () => void} watch - returns stop()
- * @property {() => Promise<object>} cursor - serialisable position for source.json
+ * @property {string} workingCopy - absolute path Ursa builds from
+ * @property {() => Promise<void>} init - restore cursor, bring the working copy up to date
+ * @property {(onChanges: (absPaths: string[]) => void) => () => void} watch - returns stop()
+ * @property {() => Promise<void>} [refresh] - full rescan of the remote into the working copy
+ * @property {() => string} describe
  */
 
 /**
+ * A sink receives the built site. Either `put`/`remove` per file, or (when
+ * `batched`) one `sync` per deploy that decides by what exists locally.
+ *
  * @typedef {object} SinkAdapter
- * @property {string} id
- * @property {() => Promise<void>} init
- * @property {(path: string, bytes: Buffer, opts: { contentType: string, cacheControl?: string }) => Promise<void>} put
- * @property {(path: string) => Promise<void>} remove
- * @property {() => Promise<{ path: string, hash: string }[]>} list
- * @property {(changedPaths: string[]) => Promise<void>} commit - e.g. CDN invalidation
+ * @property {string} id - identifies the destination; a changed id discards the deploy manifest
+ * @property {boolean} inPlace - the site is built straight into the destination; nothing to deploy
+ * @property {boolean} [batched]
+ * @property {(ctx: { output: string }) => Promise<void>} init
+ * @property {(rel: string, absPath: string) => Promise<void>} [put]
+ * @property {(rels: string[]) => Promise<void>} [remove]
+ * @property {(rels: string[]) => Promise<void>} [sync]
+ * @property {() => Promise<Map<string, string> | null>} list - path → MD5 the destination holds, if it can tell
+ * @property {(changedRels: string[]) => Promise<string[] | null>} commit - after a deploy (CDN invalidation)
+ * @property {() => string} describe
  */
 
 export {};

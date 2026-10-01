@@ -4,53 +4,55 @@ Operating the server itself, as opposed to editing a site.
 
 ## Transport
 
-- HTTP + JSON on its own listener, **default `127.0.0.1:7071`** (not the
-  public port).
-- Optionally a Unix socket (`control.socket`), which the CLI prefers when it
-  is local. File permissions are the auth.
-- Remote use requires a bearer token (`control.token`, or an `admin` role from
-  the editor's auth provider; see [AUTH.md](AUTH.md)).
+- HTTP + JSON, **default `127.0.0.1:7071`** (`control.host` / `control.port`).
+- Optionally a Unix socket (`control.socket`, created mode 0600). The CLI
+  prefers it when the config names one.
+- Auth: see [AUTH.md](AUTH.md#control-api-auth-implemented). In short: the
+  socket is trusted; over TCP, a configured `control.token` is required on
+  every request.
 
 ## Endpoints
 
-All site-scoped endpoints live under `/sites/:id`. With one site configured,
-`/sites/default` and the bare paths (`/status`, …) are equivalent.
+Site routes live under `/sites/:id/…`. With one site, the same routes work
+without the prefix (`/rebuild`, `/log`, …).
 
 | Method | Path | Does |
 |---|---|---|
-| GET | `/health` | Liveness: `200` if the process is up. For load balancers. |
-| GET | `/status` | All sites, summary. |
-| GET | `/sites/:id/status` | Full status model (see [WATCHER.md](WATCHER.md#status-model)). |
-| GET | `/sites/:id/events` | Server-sent events: batch start/end, deploy progress, errors. The CLI's `--follow` uses this. |
-| POST | `/sites/:id/rebuild` | **Force total rebuild.** Ursa build with `clean: true` (graph discarded, staging output emptied), then a normal deploy filtered by the manifest. Body: `{ "deploy": "diff" \| "all" }`; `all` ignores the manifest and re-uploads everything. |
-| POST | `/sites/:id/cache/invalidate` | **Force cache invalidation.** Body: `{ "scope": "graph" \| "working-copy" \| "manifest" \| "all", "paths"?: [...] }`. With `paths`, only those source paths are invalidated in the graph (or re-downloaded, for `working-copy`) and a pass runs. Without, the whole scope is dropped and rebuilt on the next pass. `manifest` triggers a sink reconciliation. |
-| POST | `/sites/:id/sync` | Full source rescan (`list()` + diff), for when a change was missed. |
-| POST | `/sites/:id/pause` / `resume` | Stop/start consuming source events (events are queued, not lost). Useful during bulk edits. |
-| GET | `/sites/:id/log?since=` | Recent log lines (ring buffer). |
+| GET | `/health` | `{ ok: true }`. No auth; for load balancers and monitors. |
+| GET | `/status` | Server version and every site's status. |
+| GET | `/sites/:id/status` | One site: state, source and sink, last batch and deploy, backlog (pending changes, queued jobs, undeployed files), cache stats, recent jobs, last error. |
+| GET | `/events`, `/sites/:id/events` | Server-sent events: `log`, `state`, `batch-start`, `batch-end`, `deploy`, `job-start`, `job-end`. |
+| POST | `/sites/:id/rebuild` | **Force total rebuild**: discard Ursa's build cache, empty the staging output, build everything, then reconcile the sink. Body `{ "deploy": "diff" \| "all" }`: `diff` uploads only files whose bytes changed (in practice all pages, since they carry a build stamp, and no unchanged assets); `all` forgets the manifest and re-uploads everything. |
+| POST | `/sites/:id/cache/invalidate` | **Force cache invalidation.** Body `{ "scope", "paths"? }`. `graph` with `paths` (relative to the source): rebuild what those files feed. `graph` without paths: same as rebuild. `working-copy`: re-fetch a remote source (for `fs`, same as sync). `manifest`: forget what the sink holds, ask the sink (S3 listing), upload what differs. `all`: everything. |
+| POST | `/sites/:id/sync` | Re-check every source file (for missed watcher events), build, and reconcile the sink with the output. |
+| POST | `/sites/:id/pause`, `/resume` | Stop/start building. Changes are queued meanwhile, not lost. Returns status. |
+| GET | `/sites/:id/jobs/:jobId` | A job's state (`queued`, `running`, `done`, `failed`, `cancelled`) and result. The last 100 are kept. |
+| GET | `/sites/:id/log?since=<seq>` | Recent log lines (the last 1000). |
 
-Mutating endpoints return `202 Accepted` with a job id; the job is the next
-batch. `GET /sites/:id/jobs/:jobId` reports its outcome. They never run
-concurrently with a batch: they're queued behind it.
+`rebuild`, `cache/invalidate` and `sync` return `202 Accepted` with a job id.
+Jobs run in order, between batches of source changes, never during one.
+Failed deploys are retried automatically (30 s, doubling to 10 min) as
+`retry` jobs.
 
 ## CLI
 
 `ursa-server` is both the daemon and its client.
 
 ```bash
-ursa-server start [config.yml]          # run the server (roles from config, or flags)
-ursa-server start --watch --serve       # roles as flags
+ursa-server start [config.yml]               # run the server
+ursa-server start --source docs --serve      # no config: one local site
 ursa-server status [--site id] [--json]
-ursa-server rebuild [--site id] [--deploy all]
-ursa-server invalidate [graph|working-copy|manifest|all] [paths...]
-ursa-server sync
+ursa-server rebuild [--deploy diff|all] [--no-wait]
+ursa-server invalidate [graph|working-copy|manifest|all] [paths...] [--no-wait]
+ursa-server sync [--no-wait]
 ursa-server pause | resume
-ursa-server logs [--follow]
+ursa-server logs [-f]
 ```
 
-The client finds the server via `--url`, `URSA_SERVER_URL`, the socket path
-in the config, or `http://127.0.0.1:7071`, in that order. Token from
-`--token` or `URSA_SERVER_TOKEN`.
+Commands that queue a job wait for it and print the result unless
+`--no-wait`. Exit status is non-zero if the job failed.
 
-**Recommendation:** use yargs for the CLI (Ursa already does), and keep the
-CLI a thin HTTP client: every command is one API call, so anything the CLI can
-do, a script or a dashboard can do too.
+The client finds the server from `--url` / `URSA_SERVER_URL`; else from the
+config (`--config`, or `./ursa-server.yml`): its socket if present, else its
+host and port; else `http://127.0.0.1:7071`. Token from `--token`,
+`URSA_SERVER_TOKEN`, or the config.

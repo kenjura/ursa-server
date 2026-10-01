@@ -71,7 +71,11 @@ building on it:
 - Wrapping Passport behind the provider interface keeps the long tail
   available without making it the architecture.
 
-### Bundled scheme: Auth0 (recommended), via the OIDC provider
+### Bundled scheme: Auth0, via the OIDC provider
+
+**Decided:** Auth0 for the first build. The expected setup is editors who sign
+in through Auth0 and have no cloud credentials of their own; the server holds
+the credentials for the bucket it deploys to.
 
 The bundled scheme is an `oidc` **preset**: the user creates an application in
 the vendor's dashboard and pastes three values:
@@ -93,7 +97,7 @@ its front-end SDK, which an OIDC-only integration doesn't use. Cognito is
 cheapest if you're already all-in on AWS, but it's the least pleasant to set
 up. Check current free-tier limits before choosing; they change.
 
-This is an open question; see QUESTIONS.md.
+Clerk, Cognito and others remain available as `oidc` presets.
 
 ### IAM for bucket sources
 
@@ -107,9 +111,16 @@ This is an open question; see QUESTIONS.md.
    policies decide what each user can edit. More work; same shape as
    Dropbox/Google pass-through (`Identity.sourceCredentials`).
 
-Recommended: (1) in the first auth milestone, (2) later if wanted.
+Recommended: (1) in the first auth milestone, (2) later if wanted. Given the
+Auth0 decision, (2) is low priority.
 
-## Control API auth
+## Control API auth (implemented)
 
-Loopback/socket access needs nothing. Remote access needs a `token` or an
-`admin` role session. The CLI uses tokens.
+- The Unix socket (`control.socket`, mode 0600) is trusted: file permissions
+  are the access control.
+- Over TCP, if `control.token` is set, **every** request needs
+  `Authorization: Bearer <token>` (except `/health`), even from loopback,
+  because a reverse proxy on the same machine makes remote requests look
+  local.
+- Binding to a non-loopback address without a token is a config error.
+- Later: an `admin` role session from the editor's auth works too.

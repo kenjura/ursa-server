@@ -1,5 +1,9 @@
-# Local development: MinIO stands in for S3 (source and sink buckets).
-# Draft; the ursa-server service starts working at M2/M3 (docs/ROADMAP.md).
+# Try the S3 sink locally: a folder of docs on your machine, deployed to a
+# MinIO bucket. Requires @kenjura/ursa >= 0.103.0 on npm (the image installs
+# from npm).
+#
+#   docker compose up --build
+#   edit ./docs/*.md, then browse http://localhost:9001 (ursa / ursa-dev-password)
 services:
   minio:
     image: minio/minio
@@ -10,6 +14,13 @@ services:
       MINIO_ROOT_PASSWORD: ursa-dev-password
     volumes: [minio-data:/data]
 
+  make-bucket:
+    image: minio/mc
+    depends_on: [minio]
+    entrypoint: >
+      sh -c "until mc alias set local http://minio:9000 ursa ursa-dev-password; do sleep 1; done;
+             mc mb --ignore-existing local/ursa-site"
+
   ursa-server:
     build:
       context: ../..
@@ -18,11 +29,14 @@ services:
     environment:
       AWS_ACCESS_KEY_ID: ursa
       AWS_SECRET_ACCESS_KEY: ursa-dev-password
-      AWS_ENDPOINT_URL_S3: http://minio:9000
+      URSA_SERVER_TOKEN: dev-token
     volumes:
       - ./ursa-server.yml:/config/ursa-server.yml:ro
+      - ./docs:/docs:ro
       - state:/data
-    depends_on: [minio]
+    depends_on:
+      make-bucket:
+        condition: service_completed_successfully
 
 volumes:
   minio-data:

@@ -69,5 +69,16 @@ deny-list Ursa ignores (they'd be invisible to the build anyway).
 
 ## UI delivery
 
-Static files built by esbuild into `src/editor/ui/dist`, served at `/edit/`.
-No server-side rendering; the UI talks to the API only.
+Static files built by esbuild into `src/editor/ui/dist`, served at `/edit/`
+(mounted on the dev server through `createDevServer({ mount })`). No
+server-side rendering; the UI talks to the API only.
+
+**Components:** [pure-material-css](https://masquerade-circus.github.io/pure-material-css/).
+The UI is Preact and CodeMirror, not React, and pure-material-css is plain
+CSS on native elements (`<button class="pure-material-button-contained">`,
+checkboxes, switches, text fields, progress), so it needs no framework
+bindings and adds no JavaScript. It covers form controls rather than
+composite widgets, so the file tree, dialogs, menus and tabs are written here
+in the same style (to be confirmed against its current component list when M4
+starts). If the UI ever moves to React, swap it for a
+Material component set for that framework (MUI, or Material Web).

@@ -1,77 +1,105 @@
 # Config
 
-One YAML (or JSON) file. Same conventions as Ursa's build config
-(`ursa/docs/BUILD_CONFIG.md`): kebab- or camelCase keys, relative paths resolve
-against the config file's folder, CLI flags win. `${ENV_VAR}` is substituted
-in any string so secrets stay out of the file.
+One YAML (or JSON) file, `ursa-server.yml` in the working directory by
+default (or `ursa-server start path/to/config.yml`). Same conventions as
+Ursa's build config (`ursa/docs/BUILD_CONFIG.md`): kebab- or camelCase keys,
+relative paths resolve against the config file's folder, `~` is your home
+folder, CLI flags win. `${VAR}` and `${VAR:-default}` are substituted from the
+environment in any string, so secrets stay out of the file; an unset variable
+with no default is an error.
+
+Unknown keys are warned about and ignored. A value of the wrong type stops
+startup with the key's path (`sites[0].sink.bucket: required`).
+
+## Full example
 
 ```yaml
-stateDir: ./.ursa-server
+state-dir: ./.ursa-server        # caches and deploy state (default: .ursa-server beside the config)
 
 roles:
-  watch: true
-  serve: true
-  edit: true
+  watch: true                    # follow source changes (false: build once at startup)
+  serve: false                   # dev server with live reload
+  edit: false                    # editor (not implemented yet)
 
-server:
+server:                          # the dev server (roles.serve)
+  host: 127.0.0.1
   port: 8080
-  host: 127.0.0.1
+  site: wiki                     # which site to serve (default: the first)
 
-control:
-  host: 127.0.0.1
+control:                         # control API (docs/CONTROL.md)
+  enabled: true
+  host: 127.0.0.1                # a non-loopback host requires a token
   port: 7071
-  socket: ./.ursa-server/control.sock
-  token: ${URSA_SERVER_TOKEN}
+  socket: ./.ursa-server/control.sock   # optional; trusted, mode 0600
+  token: ${URSA_SERVER_TOKEN:-}
 
 sites:
-  - id: bertball
-    # Everything under `ursa` is passed to Ursa's createBuild()
-    ursa:
-      meta: ./meta
+  - id: wiki                     # letters, digits, - and _
+    ursa:                        # passed to Ursa's build
+      meta: ./meta               # default: Ursa's bundled templates
       exclude: [legacy]
-      directory-depth: 2
+      whitelist: ./whitelist.txt
+      directory-json: true
+      directory-depth: 2         # or infinite
+      json-only: false
+      concurrency: 50
+      explain: false
 
     source:
-      type: s3
-      bucket: bertball-src
-      prefix: docs/
-      region: us-east-1
-      notifications:
-        type: sqs
-        queueUrl: https://sqs.us-east-1.amazonaws.com/123/bertball-src-events
-      # credentials: default AWS chain (env, profile, instance role)
+      type: fs
+      path: ~/wiki/docs
 
     sink:
       type: s3
-      bucket: wiki.bertball.com
+      bucket: wiki.example.com
+      prefix: ""                 # key prefix inside the bucket
+      region: us-east-1
+      # endpoint: https://<account>.r2.cloudflarestorage.com   # R2, B2, MinIO…
+      # force-path-style: true                                 # MinIO
+      # credentials:             # default: AWS chain (env, ~/.aws profile, instance role)
+      #   access-key-id: ${AWS_ACCESS_KEY_ID}
+      #   secret-access-key: ${AWS_SECRET_ACCESS_KEY}
+      #   profile: wiki-deployer
+      cache-control:
+        html: "public, max-age=0, must-revalidate"
+        json: "public, max-age=0, must-revalidate"
+        assets: "public, max-age=3600"
       cloudfront:
-        distributionId: E123ABC
-      cacheControl:
-        html: "no-cache"
-        assets: "public, max-age=31536000, immutable"
-
-auth:
-  providers:
-    - preset: auth0
-      domain: kenjura.us.auth0.com
-      clientId: abc
-      clientSecret: ${AUTH0_CLIENT_SECRET}
-    - type: token
-      tokens: [${URSA_SERVER_TOKEN}]
-  roles:
-    admin: [andrew@kenjura.com]
-    editor: ["*@kenjura.com"]
+        distribution-id: E123ABC
+        max-paths: 25            # more changed paths than this → invalidate /*
 ```
 
-Other source/sink shapes:
+## Sources
+
+| Type | Keys | Status |
+|---|---|---|
+| `fs` | `path` | Implemented |
+| `s3` | `bucket`, `prefix`, `region`, `notifications: { type: sqs, queue-url }` or `poll` | M3 |
+| `dropbox` | `path`, `token` | M3 |
+| `gdrive` | `folder-id`, `credentials` | M3 |
+
+## Sinks
+
+| Type | Keys | Notes |
+|---|---|---|
+| `fs` | `path` | The site is built directly into `path`. Nothing to deploy. Default when `sink` is omitted (then the build goes to `state-dir/sites/<id>/out`). |
+| `s3` | see example | Needs `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket`, and `cloudfront:CreateInvalidation` if `cloudfront` is set: [infra/aws/iam-policy.json](../infra/aws/iam-policy.json). |
+| `rsync` | `target`, `ssh-key`, `port`, `args` | `target` is `user@host:/path` or a local folder, and must exist. SSH runs non-interactively, so use a key without a passphrase, or an agent. |
 
 ```yaml
-source: { type: fs, path: ~/wiki/docs }
-source: { type: dropbox, path: /Apps/ursa/bertball, token: ${DROPBOX_REFRESH_TOKEN} }
-source: { type: gdrive, folderId: 1AbC..., credentials: ./gdrive-sa.json }
-sink:   { type: fs, path: ./output }
-sink:   { type: rsync, target: bitnami@52.87.178.252:/home/bitnami/db/ursa, sshKey: ~/.ssh/wiki.pem }
+sink:
+  type: rsync
+  target: bitnami@52.87.178.252:/home/bitnami/db/ursa
+  ssh-key: ~/.ssh/wiki.bertball.com.pem
+  # port: 2222
+  # args: ["--chmod=F644,D755"]
 ```
 
-Validation: a JSON schema in `src/config/schema.js`; unknown keys warn (as
-Ursa does), wrong types fail at startup with the key path.
+## Without a config file
+
+```bash
+ursa-server start --source ./docs [--output ./site] [--meta ./meta] [--serve] [--port 8080] [--no-watch]
+```
+
+One site, `fs` source, `fs` sink (`--output`, default `./output`). Paths are
+relative to the working directory.

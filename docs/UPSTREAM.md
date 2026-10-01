@@ -1,53 +1,52 @@
-# Changes needed in Ursa
+# Changes in Ursa
 
-ursa-server wraps Ursa's incremental build. A few small changes in Ursa make
-that clean instead of fragile. All are additive; `ursa generate` / `serve`
-behave the same.
+ursa-server wraps Ursa's incremental build. These are the changes in Ursa
+that make that clean.
 
-## 1. Report written and deleted paths (required)
+## Done in Ursa 0.103.0 (branch `version/0.103.0`)
 
-`runPass()` returns counts (`written`, `deleted`) but not paths. The delta
-deploy needs the paths.
+ursa-server requires `@kenjura/ursa` ≥ 0.103.0. All of these are additive
+except the hot-reload change, which is internal to `ursa serve`. See Ursa's
+`docs/LIBRARY.md`.
 
-- `createBuild({ onOutputWrite(rel), onOutputDelete(rel) })`, called from the
-  existing `onWrite` hook in `pass.js` and from `deleteOutputs`, **or**
-- `runPass()` returns `{ written: string[], deleted: string[] }` alongside the
-  counts.
+1. **Written and deleted paths.** `createBuild({ onOutputWrite, onOutputDelete })`,
+   and `writtenPaths` / `deletedPaths` in each pass's summary.
+2. **Public entry point.** `@kenjura/ursa/build` exports `createBuild`,
+   `createDevServer`, `createIgnoreFilter`, `resolveUrlToOutput`,
+   `getUrsaVersion` (with an `exports` map that keeps every old path importable).
+3. **`cacheDir`.** Graph, cache stamp, document-template bases and build id
+   can live outside the docroot. An unstamped, non-empty `cacheDir` is refused
+   rather than cleared.
+4. **`build.invalidate(paths)`**, the watcher logic `ursa serve` used
+   internally (directories and vanished paths rescan their subtree).
+5. **`createDevServer`**: `ursa serve`'s HTTP + live-reload server as a
+   module, with a `mount(app)` hook for extra routes. Its WebSocket moved from
+   port+1 to `/__ursa/ws` on the same port, so it works behind a proxy.
 
-Fallback without it: hash the whole output directory after every pass and
-diff against the manifest. Correct, but O(site) per edit.
+## Still wanted
 
-## 2. Export the build and server entry points (required)
+6. **Optional build stamp.** Every page's footer carries the build number and
+   time, so a clean rebuild changes every page's bytes and ursa-server has to
+   re-upload them all (and invalidate CloudFront `/*`). An option to omit the
+   stamp (or to keep the previous build's stamp for pages whose other content
+   didn't change) would make a forced rebuild deploy almost nothing.
+7. **Clean-build deletions.** `clean: true` empties the output without
+   reporting each file. ursa-server compensates by reconciling against its
+   manifest after a rebuild; reporting them would make that unnecessary.
+8. **Template reconciliation writes to the docroot.** Document-template
+   reconciliation (`_templates/`) rewrites documents in the source. For
+   remote sources (M3), those writes land in the working copy and must be
+   pushed back to the source; an `onSourceWrite(path)` hook would let
+   ursa-server do that.
+9. **Render a draft** (`renderDraft(sourceRel, text)` → HTML without writing),
+   for the editor's unsaved preview (M4+).
+10. **Parallel builds per process.** Confirm or remove module-level state
+    (parser pool, profiler) so two builds can run at once. Today sites in one
+    process build one after another.
 
-`createBuild` (in `src/helper/build/pass.js`) and `serveFiles` / the
-live-reload notifier (in `src/serve.js`) aren't exported from
-`lib/index.js`. Importing internal paths would break on any refactor.
-Proposal: `import { createBuild, createDevServer } from "@kenjura/ursa/build"`
-with an `exports` map in `package.json`.
+## Baseline note
 
-## 3. Cache directory outside the docroot (recommended)
-
-The graph lives in `<docroot>/.ursa/` and `.ursa.json`. With a remote source
-that's in the working copy, which is fine. But with a **local-FS source**, it
-means the server writes into the user's folder (a Dropbox-synced folder would
-upload it), and a read-only source can't be built at all. Proposal: a
-`cacheDir` option on `createBuild`, defaulting to today's location. (Graph leaf
-ids are already docroot-relative, so moving the cache is cheap.)
-
-## 4. Public `invalidatePath` / `rescan` (nice to have)
-
-Today `serve.js` reaches into the graph to mark paths stale. A documented
-`build.invalidate(paths)` and `build.runPass({ rescan: true })` (the latter
-already exists) would be the contract ursa-server relies on.
-
-## 5. Render one document from a string (later, for draft preview)
-
-`renderDraft(sourceRel, text)` → HTML using the site's current graph
-(templates, menus, bundles), without writing anything. Only needed for the
-editor's unsaved-preview feature.
-
-## 6. Multiple builds per process (later, for multi-site)
-
-Confirm or remove module-level state (`parserPool`, profiler singleton) so two
-`createBuild()` instances don't interfere. Otherwise ursa-server runs one
-worker thread per site.
+`src/helper/build/__test__/graph.test.js` fails 3–5 tests on `main` as well,
+varying run to run: they write same-sized content within the filesystem's
+mtime resolution, so the size+mtime fast path sees no change. Not caused by
+0.103.0.
