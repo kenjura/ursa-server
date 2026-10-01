@@ -25,6 +25,7 @@ server:                          # the dev server (roles.serve)
   host: 127.0.0.1
   port: 8080
   site: wiki                     # which site to serve (default: the first)
+  access: public                 # public | viewer | editor | admin (needs `auth`)
 
 control:                         # control API (docs/CONTROL.md)
   enabled: true
@@ -68,6 +69,17 @@ sites:
         distribution-id: E123ABC
         max-paths: 25            # more changed paths than this → invalidate /*
 ```
+
+`auth` (sign-in with Auth0 or any OIDC provider) is documented in
+[AUTH.md](AUTH.md#config). [ursa-server.example.yml](../ursa-server.example.yml)
+is a complete starting point with Auth0.
+
+## Secrets and `.env`
+
+`ursa-server` loads `.env` beside the config (or `--env-file path`) before
+reading it. Variables already set in the environment win. Keep `.env` out of
+version control; [.env.example](../.env.example) lists what the example
+config uses.
 
 ## Sources
 

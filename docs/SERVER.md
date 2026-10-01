@@ -31,7 +31,8 @@ The **staging output** (the local build), not the sink. That means:
   as `viewedOutputs` so those pages build first, and the client reloads when
   its page changes.
 - `Cache-Control: no-store` (as Ursa's serve does).
-- Later: put the server behind the editor's auth for private previews.
+- Optionally behind sign-in: `server.access: viewer` (or editor/admin) with
+  an `auth` section. See [AUTH.md](AUTH.md).
 
 ## Implementation: Ursa's own server
 

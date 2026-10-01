@@ -1,7 +1,6 @@
 {
   "name": "@kenjura/ursa-server",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "Watch, rebuild, deploy, serve and edit Ursa sites",
   "author": "Andrew London <andrew@kenjura.com>",
   "license": "ISC",
@@ -25,13 +24,23 @@
     "express": "^4.21.0",
     "mime-types": "^2.1.35",
     "node-watch": "^0.7.4",
+    "openid-client": "^6.8.0",
     "yaml": "^2.6.0",
     "yargs": "^17.7.2"
   },
   "files": [
     "bin/",
     "src/",
+    "docs/",
     "README.md",
-    "docs/"
-  ]
+    "ursa-server.example.yml"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kenjura/ursa-server.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
 }

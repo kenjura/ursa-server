@@ -8,10 +8,11 @@ people a web UI to edit it.
 
 It's meant for a machine that stays on: a home server, an EC2 instance, a VPS.
 
-**Status:** M1 and M2 of the [roadmap](docs/ROADMAP.md) are built. It watches
-a local folder, rebuilds incrementally with Ursa, and deploys only changed
-files to a local folder, an S3-compatible bucket (with CloudFront
-invalidation) or a server over rsync. There's a control API and CLI. Remote
+**Status:** M1 and M2 of the [roadmap](docs/ROADMAP.md) are built, plus
+Auth0 sign-in. It watches a local folder, rebuilds incrementally with Ursa,
+and deploys only changed files to a local folder, an S3-compatible bucket
+(with CloudFront invalidation) or a server over rsync. The served site can
+require an Auth0 (or any OIDC) sign-in. There's a control API and CLI. Remote
 sources (S3, Dropbox, Google Drive) and the editor come next.
 
 ## Quick start
@@ -23,7 +24,10 @@ npm install
 npx ursa-server start --source ./docs --output ./site --serve   # dev: watch, build, serve with live reload
 ```
 
-Production-style, from a config file (see [docs/CONFIG.md](docs/CONFIG.md)):
+From a config file: start from [ursa-server.example.yml](ursa-server.example.yml)
+(local folder in and out, Auth0 sign-in; set-up steps in
+[docs/AUTH.md](docs/AUTH.md#setting-up-auth0)), or publish to S3
+(see [docs/CONFIG.md](docs/CONFIG.md)):
 
 ```yaml
 # ursa-server.yml
@@ -58,7 +62,7 @@ npm test
 | Role | What it does | Status | Doc |
 |---|---|---|---|
 | **Watcher** | Watches a source for changes, rebuilds only what changed using Ursa's incremental build graph, and deploys the delta to a sink. Has a control API and CLI for status, cache invalidation and full rebuilds. | fs source; fs, s3, rsync sinks | [WATCHER.md](docs/WATCHER.md), [CONTROL.md](docs/CONTROL.md) |
-| **Server** | Serves the built site over HTTP with live reload. Mainly for development and previews. | Done | [SERVER.md](docs/SERVER.md) |
+| **Server** | Serves the built site over HTTP with live reload, optionally behind Auth0 sign-in. Mainly for development and previews. | Done | [SERVER.md](docs/SERVER.md), [AUTH.md](docs/AUTH.md) |
 | **Editor** | A web UI for editing the source files, behind Auth0 (and other providers). Edits are written back through the source adapter, so the watcher picks them up like any other change. | Designed | [EDITOR.md](docs/EDITOR.md), [AUTH.md](docs/AUTH.md) |
 
 ```

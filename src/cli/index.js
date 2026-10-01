@@ -4,6 +4,7 @@
  */
 
 import { existsSync } from "fs";
+import { dirname, join, resolve } from "path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { loadConfig, ConfigError } from "../config/load.js";
@@ -23,6 +24,7 @@ export async function main(argv) {
     .option("url", { type: "string", describe: "Control API URL [env URSA_SERVER_URL]" })
     .option("token", { type: "string", describe: "Control API token [env URSA_SERVER_TOKEN]" })
     .option("site", { type: "string", describe: "Site id, when the server has several" })
+    .option("env-file", { type: "string", describe: "Load environment variables from this file (default: .env beside the config, if present)" })
     .option("json", { type: "boolean", describe: "Print raw JSON" })
 
     .command(
@@ -95,8 +97,19 @@ function configPath(a) {
   return DEFAULT_CONFIGS.find((f) => existsSync(f)) ?? null;
 }
 
+/**
+ * Load secrets from a .env file: `--env-file`, else `.env` beside the config
+ * (or in the working directory). Variables already set in the environment win.
+ */
+function loadEnv(a, config) {
+  const file = a.envFile ?? join(config ? dirname(resolve(config)) : process.cwd(), ".env");
+  if (a.envFile && !existsSync(file)) throw new ConfigError(`--env-file ${file}: not found`);
+  if (existsSync(file)) process.loadEnvFile(file);
+}
+
 async function start(a) {
   const path = a.source ? a.config ?? null : configPath(a);
+  loadEnv(a, path);
   const config = await loadConfig(path, {
     source: a.source,
     output: a.output,
@@ -129,6 +142,8 @@ function run(fn) {
     let url = a.url ?? process.env.URSA_SERVER_URL ?? null;
     if (!url) {
       const path = configPath(a);
+      loadEnv(a, path);
+      token ??= process.env.URSA_SERVER_TOKEN ?? null;
       if (path) {
         const config = await loadConfig(path, {}, { warn: () => {} });
         if (config.control.socket && existsSync(config.control.socket)) socket = config.control.socket;

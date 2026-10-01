@@ -1,6 +1,76 @@
 # Auth
 
-Who may use the editor (and, remotely, the control API).
+Who may see the site preview, use the editor, and (remotely) the control API.
+
+**Implemented:** sign-in with any OpenID Connect provider, Auth0 preset
+first; signed session cookies; role rules; the dev server gated by
+`server.access`. **Not yet:** the editor (M4), the other providers below,
+per-path scopes (parsed, not enforced), admin sessions for the control API.
+
+## Setting up Auth0
+
+1. In the Auth0 dashboard: **Applications → Create Application → Regular Web
+   Application**. (Not "Single Page": the server keeps the client secret.)
+2. On its **Settings** tab, copy **Domain**, **Client ID** and **Client
+   Secret** into your `.env` as `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`,
+   `AUTH0_CLIENT_SECRET`.
+3. Still on Settings, under **Application URIs**, for each address people
+   will use (your `auth.base-url`):
+   - **Allowed Callback URLs:** `http://localhost:8080/auth/callback`
+   - **Allowed Logout URLs:** `http://localhost:8080/`
+
+   Comma-separate several (e.g. add `https://wiki-dev.example.com/auth/callback`
+   later). Web Origins and CORS settings aren't needed. Save.
+4. **Connections** tab: choose how people sign in (Google, username/password,
+   …). If anyone can reach your Auth0 login page, consider **Authentication →
+   Database → Disable Sign Ups**. Strangers who sign up still get no access
+   (roles decide), but they won't clutter your user list.
+5. Make a session secret: `openssl rand -base64 48` → `URSA_SESSION_SECRET`.
+6. In the config, `auth.roles` says who gets in (below). Email rules only
+   match **verified** emails: Google sign-ins are verified; username/password
+   users must click Auth0's verification email first. To admit someone
+   regardless, use their Auth0 user id (e.g. `auth0|65f…`, shown in **User
+   Management → Users**).
+
+Then `ursa-server start`, open `http://localhost:8080/` (the same host name
+as `base-url`; cookies don't carry between `localhost` and `127.0.0.1`), and
+you're sent to Auth0. `/auth/me` shows who you're signed in as and your
+roles; `/auth/logout` signs out here and at Auth0.
+
+Sign-out at Auth0 uses its OIDC end-session endpoint when the tenant
+advertises one, otherwise `/v2/logout`. Both need the Allowed Logout URL.
+
+## Config
+
+```yaml
+server:
+  access: viewer                  # public | viewer | editor | admin
+
+auth:
+  base-url: http://localhost:8080 # default: http://<server.host>:<server.port>
+  session-secret: ${URSA_SESSION_SECRET}
+  session-days: 14
+  provider:
+    preset: auth0                 # or: issuer: https://… for any OIDC provider
+    domain: ${AUTH0_DOMAIN}
+    client-id: ${AUTH0_CLIENT_ID}
+    client-secret: ${AUTH0_CLIENT_SECRET}
+  roles:
+    admin:  ["${SITE_ADMIN_EMAIL}"]
+    editor: ["*@example.com"]
+    viewer: ["friend@example.com", "google-oauth2|1234567890"]
+```
+
+Rule forms: `"*"` (anyone who signs in), `"*@domain"` (verified email at a
+domain), an exact verified email, a provider user id (anything containing
+`|`), or `"sub:<id>"`. Roles nest: admin ⊃ editor ⊃ viewer. Someone matching
+no rule is refused at sign-in and gets no session. Sessions are stateless
+(signed cookies): changing `session-secret` signs everyone out, and role
+changes apply at the next sign-in.
+
+**Limitation:** the live-reload WebSocket (`/__ursa/ws`) isn't behind
+sign-in. It carries only "reload" notices, never page content, but an
+anonymous client could see that the site changed.
 
 ## Requirements
 
@@ -36,11 +106,10 @@ Providers say *who*; the config says *what they may do*:
 
 ```yaml
 auth:
-  providers: [oidc]
   roles:
     admin:  ["andrew@kenjura.com"]
     editor: ["*@kenjura.com", "github|12345"]
-  scopes:                       # optional per-user path limits
+  scopes:                       # optional per-user path limits (editor; not enforced yet)
     "friend@example.com": ["campaigns/bertball/**"]
 ```
 
@@ -77,17 +146,9 @@ building on it:
 in through Auth0 and have no cloud credentials of their own; the server holds
 the credentials for the bucket it deploys to.
 
-The bundled scheme is an `oidc` **preset**: the user creates an application in
-the vendor's dashboard and pastes three values:
-
-```yaml
-auth:
-  providers:
-    - preset: auth0
-      domain: kenjura.us.auth0.com
-      clientId: ...
-      clientSecret: ${AUTH0_CLIENT_SECRET}
-```
+The bundled scheme is an `oidc` **preset**: you create an application in
+the vendor's dashboard and paste three values (see
+[Setting up Auth0](#setting-up-auth0)).
 
 **Auth0** because it's standard OIDC (no SDK needed, so it stays a preset, not
 a dependency), its free tier comfortably covers a personal or small-team wiki,

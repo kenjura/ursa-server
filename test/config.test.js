@@ -29,10 +29,14 @@ sites:
       prefix: /site
       cloudfront: { distribution-id: E1 }
 auth:
+  session-secret: "\${SECRET}"
+  provider: { preset: auth0, domain: t.us.auth0.com, client-id: cid, client-secret: cs }
   roles:
     editor: ["first-last@example.com"]
+  scopes:
+    first-last@example.com: ["campaigns/**"]
 `);
-  const c = await loadConfig(file, {}, { env: { TOKEN: "t0k", HOME: "/home/x" }, warn: quiet });
+  const c = await loadConfig(file, {}, { env: { TOKEN: "t0k", SECRET: "s".repeat(40) }, warn: quiet });
   assert.equal(c.stateDir, join(dir, "conf/state"));
   assert.equal(c.control.token, "t0k");
   const s = c.sites[0];
@@ -44,8 +48,11 @@ auth:
   assert.equal(s.sink.cloudfront.distributionId, "E1");
   assert.equal(s.sink.cloudfront.maxPaths, 25);
   assert.match(s.sink.cacheControl.html, /max-age=0/);
-  // auth is data: its keys and values are not camelized
+  // Role rules and scopes are data: emails used as keys are not camelized
   assert.deepEqual(c.auth.roles.editor, ["first-last@example.com"]);
+  assert.deepEqual(c.auth.scopes, { "first-last@example.com": ["campaigns/**"] });
+  assert.equal(c.auth.provider.clientId, "cid");
+  assert.equal(c.auth.baseUrl, "http://127.0.0.1:8080");
 });
 
 test("an unset variable without a default is an error naming the key", async (t) => {

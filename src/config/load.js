@@ -40,8 +40,12 @@ export async function loadConfig(path, flags = {}, { env = process.env, warn = (
     raw ??= {};
   }
   const substituted = substituteEnv(raw, env, "config");
-  // `auth` holds emails and user ids as keys; they are data, not option names
-  raw = { ...camelize({ ...substituted, auth: undefined }), auth: substituted.auth };
+  // auth.roles and auth.scopes are keyed by role names and emails: data, not option names
+  const auth = substituted?.auth;
+  raw = camelize(substituted);
+  if (auth && typeof auth === "object") {
+    raw.auth = { ...raw.auth, roles: auth.roles, scopes: auth.scopes };
+  }
   return normalize(raw, flags, { base, cwd, warn });
 }
 
@@ -61,11 +65,12 @@ export function normalize(raw, flags = {}, { base = process.cwd(), cwd = process
   };
 
   const serverRaw = raw.server ?? {};
-  v.object(serverRaw, "server", ["host", "port", "site"]);
+  v.object(serverRaw, "server", ["host", "port", "site", "access"]);
   const server = {
     host: flags.host ?? v.string(serverRaw.host, "server.host") ?? "127.0.0.1",
     port: flags.port ?? v.port(serverRaw.port, "server.port") ?? 8080,
     site: v.string(serverRaw.site, "server.site") ?? null,
+    access: v.oneOf(serverRaw.access, "server.access", ["public", "viewer", "editor", "admin"]) ?? "public",
   };
 
   const controlRaw = raw.control ?? {};
@@ -105,7 +110,56 @@ export function normalize(raw, flags = {}, { base = process.cwd(), cwd = process
   });
   if (server.site && !ids.has(server.site)) throw new ConfigError(`server.site: no site "${server.site}"`);
 
-  return { stateDir, roles, server, control, sites, auth: raw.auth ?? null };
+  const auth = raw.auth ? normalizeAuth(raw.auth, server, v) : null;
+  if (server.access !== "public" && !auth) {
+    throw new ConfigError(`server.access is "${server.access}", which needs an \`auth\` section`);
+  }
+  if (auth && server.access === "public" && roles.serve) {
+    warn("config: auth is configured but server.access is public, so the site is served without sign-in");
+  }
+
+  return { stateDir, roles, server, control, sites, auth };
+}
+
+const MIN_SECRET = 32;
+
+function normalizeAuth(a, server, v) {
+  v.object(a, "auth", ["baseUrl", "sessionSecret", "sessionDays", "provider", "roles", "scopes"]);
+  const secret = v.string(a.sessionSecret, "auth.session-secret");
+  if (!secret || secret.length < MIN_SECRET) {
+    throw new ConfigError(`auth.session-secret: required, at least ${MIN_SECRET} characters (e.g. \`openssl rand -base64 48\`)`);
+  }
+  const p = a.provider;
+  if (!p) throw new ConfigError("auth.provider: required");
+  v.object(p, "auth.provider", ["type", "preset", "issuer", "domain", "clientId", "clientSecret", "scope", "region", "userPoolId"]);
+  const type = v.oneOf(p.type, "auth.provider.type", ["oidc"]) ?? "oidc";
+  const preset = v.oneOf(p.preset, "auth.provider.preset", ["auth0", "google", "cognito"]) ?? null;
+  if (!preset && !p.issuer) throw new ConfigError("auth.provider: give `preset` (auth0, google, cognito) or `issuer`");
+  if (preset === "auth0" && !p.domain) throw new ConfigError("auth.provider.domain: required for auth0 (e.g. your-tenant.us.auth0.com)");
+  for (const k of ["clientId", "clientSecret"]) {
+    if (!v.string(p[k], `auth.provider.${kebab(k)}`)) throw new ConfigError(`auth.provider.${kebab(k)}: required`);
+  }
+
+  const rolesRaw = a.roles ?? {};
+  v.object(rolesRaw, "auth.roles", ["viewer", "editor", "admin"]);
+  const roleRules = {};
+  for (const r of ["viewer", "editor", "admin"]) roleRules[r] = v.stringArray(rolesRaw[r], `auth.roles.${r}`) ?? [];
+  if (!Object.values(roleRules).some((l) => l.length)) {
+    throw new ConfigError("auth.roles: nobody has a role, so nobody could sign in (e.g. admin: [you@example.com])");
+  }
+
+  const host = server.host === "0.0.0.0" || server.host === "::" ? "localhost" : server.host;
+  const baseUrl = (v.string(a.baseUrl, "auth.base-url") ?? `http://${host}:${server.port}`).replace(/\/$/, "");
+  if (!/^https?:\/\//.test(baseUrl)) throw new ConfigError(`auth.base-url: expected an http(s) URL (got "${baseUrl}")`);
+
+  return {
+    baseUrl,
+    sessionSecret: secret,
+    sessionDays: v.integer(a.sessionDays, "auth.session-days") ?? 14,
+    provider: { type, preset, issuer: p.issuer ?? null, domain: p.domain ?? null, clientId: p.clientId, clientSecret: p.clientSecret, scope: p.scope ?? null, region: p.region, userPoolId: p.userPoolId },
+    roles: roleRules,
+    scopes: a.scopes ?? {},
+  };
 }
 
 function normalizeSite(s, at, v, base) {

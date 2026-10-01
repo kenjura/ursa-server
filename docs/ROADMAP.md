@@ -41,10 +41,13 @@ deploy is the next thing to try; `infra/local` has MinIO for a closer test.
 - CodeMirror + Preact UI styled with pure-material-css: tree, editor, preview
   iframe, upload, conflicts.
 
-## M5: Auth
+## M5: Auth (started)
 
-- Session layer, role/scope config.
-- `oidc` provider + **Auth0 preset** (the bundled scheme; first).
+- ✅ Session layer (signed cookies), role rules.
+- ✅ `oidc` provider + **Auth0 preset**; gates the dev server (`server.access`).
+- Path scopes enforced by the editor; admin sessions for the control API.
+- Gate the live-reload WebSocket too (needs a `verifyClient` hook in Ursa's
+  `createDevServer`).
 - Dropbox / Google login with optional pass-through.
 - AWS Identity Center / Cognito presets.
 - Passport adapter.

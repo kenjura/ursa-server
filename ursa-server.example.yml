@@ -1,0 +1,50 @@
+# Example ursa-server config: one site built from a local folder into a local
+# folder, served with live reload behind an Auth0 sign-in.
+#
+# Copy to ursa-server.yml beside your docs. Secrets come from the environment
+# or a .env file next to this config (see .env.example); ${VAR} is replaced by
+# the variable, ${VAR:-default} falls back to the default. Full reference:
+# docs/CONFIG.md. Auth0 setup: docs/AUTH.md#setting-up-auth0.
+
+state-dir: ./.ursa-server          # build cache and deploy state; add it to .gitignore
+
+roles:
+  watch: true                      # rebuild on every change
+  serve: true                      # serve the built site with live reload
+
+server:
+  host: 127.0.0.1                  # 0.0.0.0 to reach it from other machines (then set auth.base-url)
+  port: 8080
+  access: viewer                   # public | viewer | editor | admin: who may see the site
+
+control:
+  port: 7071                       # `ursa-server status`, `rebuild`, … talk to this (localhost only)
+
+sites:
+  - id: mysite
+    ursa:
+      # meta: ./meta               # your own templates; default: Ursa's bundled ones
+      exclude: [drafts]            # folders under the source to leave out
+    source:
+      type: fs
+      path: ./docs
+    sink:
+      type: fs
+      path: ./output               # the site is built straight into this folder
+      # To publish elsewhere instead, see docs/CONFIG.md#sinks:
+      # type: s3, bucket: …, cloudfront: { distribution-id: … }
+      # type: rsync, target: user@host:/var/www/site, ssh-key: ~/.ssh/deploy
+
+auth:
+  base-url: ${URSA_BASE_URL:-http://localhost:8080}   # the URL people use; Auth0 redirects back to <base-url>/auth/callback
+  session-secret: ${URSA_SESSION_SECRET}              # 32+ random characters: openssl rand -base64 48
+  session-days: 14
+  provider:
+    preset: auth0
+    domain: ${AUTH0_DOMAIN}                           # e.g. your-tenant.us.auth0.com
+    client-id: ${AUTH0_CLIENT_ID}
+    client-secret: ${AUTH0_CLIENT_SECRET}
+  roles:                                              # who gets in; higher roles include lower ones
+    admin: ["${SITE_ADMIN_EMAIL}"]
+    # editor: ["*@example.com"]                       # anyone with a verified address at a domain
+    viewer: []                                        # e.g. ["friend@example.com", "google-oauth2|1234…"]
