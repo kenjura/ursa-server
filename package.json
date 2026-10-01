@@ -1,0 +1,23 @@
+{
+  "name": "@kenjura/ursa-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Watch, rebuild, deploy, serve and edit Ursa sites",
+  "author": "Andrew London <andrew@kenjura.com>",
+  "license": "ISC",
+  "type": "module",
+  "bin": {
+    "ursa-server": "bin/ursa-server.js"
+  },
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node bin/ursa-server.js start",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@kenjura/ursa": "file:../ursa"
+  }
+}

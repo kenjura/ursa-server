@@ -1,0 +1,29 @@
+# Local development: MinIO stands in for S3 (source and sink buckets).
+# Draft; the ursa-server service starts working at M2/M3 (docs/ROADMAP.md).
+services:
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    ports: ["9000:9000", "9001:9001"]
+    environment:
+      MINIO_ROOT_USER: ursa
+      MINIO_ROOT_PASSWORD: ursa-dev-password
+    volumes: [minio-data:/data]
+
+  ursa-server:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+    ports: ["8080:8080", "7071:7071"]
+    environment:
+      AWS_ACCESS_KEY_ID: ursa
+      AWS_SECRET_ACCESS_KEY: ursa-dev-password
+      AWS_ENDPOINT_URL_S3: http://minio:9000
+    volumes:
+      - ./ursa-server.yml:/config/ursa-server.yml:ro
+      - state:/data
+    depends_on: [minio]
+
+volumes:
+  minio-data:
+  state:

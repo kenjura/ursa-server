@@ -1,0 +1,14 @@
+stateDir: /data
+roles: { watch: true, serve: true, edit: true }
+server: { host: 0.0.0.0, port: 8080 }
+control: { host: 0.0.0.0, port: 7071, token: dev-token }
+sites:
+  - id: dev
+    source: { type: s3, bucket: ursa-src, poll: 5s }
+    sink: { type: s3, bucket: ursa-site }
+auth:
+  providers:
+    - { type: token, tokens: [dev-token] }
+  roles:
+    admin: ["*"]
+    editor: ["*"]

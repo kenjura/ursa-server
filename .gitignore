@@ -1,0 +1,8 @@
+node_modules/
+.ursa-server/
+output/
+.env
+*.log
+src/editor/ui/dist/
+infra/terraform/.terraform/
+infra/terraform/*.tfstate*
