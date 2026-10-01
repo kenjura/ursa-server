@@ -61,6 +61,11 @@ auth:
     viewer: ["friend@example.com", "google-oauth2|1234567890"]
 ```
 
+An entry can hold several rules separated by commas or spaces, so a list can
+come from one variable: `viewer: ["${WIKI_VIEWERS:-}"]` with
+`WIKI_VIEWERS=a@x.com,b@y.com` in `.env`. Useful when the config is in a
+public repo.
+
 Rule forms: `"*"` (anyone who signs in), `"*@domain"` (verified email at a
 domain), an exact verified email, a provider user id (anything containing
 `|`), or `"sub:<id>"`. Roles nest: admin ⊃ editor ⊃ viewer. Someone matching

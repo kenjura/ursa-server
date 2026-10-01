@@ -143,7 +143,11 @@ function normalizeAuth(a, server, v) {
   const rolesRaw = a.roles ?? {};
   v.object(rolesRaw, "auth.roles", ["viewer", "editor", "admin"]);
   const roleRules = {};
-  for (const r of ["viewer", "editor", "admin"]) roleRules[r] = v.stringArray(rolesRaw[r], `auth.roles.${r}`) ?? [];
+  for (const r of ["viewer", "editor", "admin"]) {
+    // An entry may hold several rules separated by commas or spaces, so one
+    // environment variable can carry a whole list
+    roleRules[r] = (v.stringArray(rolesRaw[r], `auth.roles.${r}`) ?? []).flatMap((e) => e.split(/[\s,]+/)).filter(Boolean);
+  }
   if (!Object.values(roleRules).some((l) => l.length)) {
     throw new ConfigError("auth.roles: nobody has a role, so nobody could sign in (e.g. admin: [you@example.com])");
   }

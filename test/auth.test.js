@@ -42,6 +42,9 @@ test("config: auth0 needs domain, client id/secret, a long secret, and someone w
   assert.throws(() => normalize({ ...base, auth: { ...auth, sessionSecret: "short" } }, {}, { warn: quiet }), /at least 32/);
   assert.throws(() => normalize({ ...base, auth: { ...auth, provider: { preset: "auth0", clientId: "c", clientSecret: "s" } } }, {}, { warn: quiet }), /domain: required/);
   assert.throws(() => normalize({ ...base, auth: { ...auth, roles: {} } }, {}, { warn: quiet }), /nobody has a role/);
+  assert.throws(() => normalize({ ...base, auth: { ...auth, roles: { admin: [""] } } }, {}, { warn: quiet }), /nobody has a role/);
+  const listed = normalize({ ...base, auth: { ...auth, roles: { viewer: ["a@x.com, b@y.com  c@z.com", "*@d.org"] } } }, {}, { warn: quiet });
+  assert.deepEqual(listed.auth.roles.viewer, ["a@x.com", "b@y.com", "c@z.com", "*@d.org"]);
 });
 
 /** An app guarded by auth, against the fake issuer; a tiny cookie-keeping browser. */
