@@ -53,8 +53,9 @@ To run it as a service, see [infra/](infra/README.md) (systemd unit, Docker).
 ### Developing against a local Ursa
 
 ```bash
-npm run link-ursa        # installs ../ursa (or $URSA_PATH) in place of the npm package
-npm test
+pnpm install
+pnpm run link-ursa       # use ../ursa (or $URSA_PATH) instead of the npm package; `pnpm install` undoes it
+pnpm test
 ```
 
 ## What it does

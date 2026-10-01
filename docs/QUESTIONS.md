@@ -11,7 +11,7 @@
 | Bundled auth | Auth0, as an `oidc` preset. |
 | Passport | Adapter only; OIDC is the core. |
 | License, git identity | Match Ursa: ISC; Andrew London. |
-| Ursa dependency | npm, `^0.103.0`. For development, `npm run link-ursa` installs `../ursa` in its place. |
+| Ursa dependency | npm, `^0.103.0`. For development, `pnpm run link-ursa` points it at `../ursa`. |
 | Editor components | [pure-material-css](https://masquerade-circus.github.io/pure-material-css/) (the UI isn't React); a framework's Material set if that changes. |
 | Language | Plain ESM JavaScript with JSDoc, matching Ursa. |
 | HTTP framework | Express (Ursa's dev server is Express). |
@@ -40,6 +40,6 @@
 7. **Ursa build stamp** (UPSTREAM.md #6): worth adding an option so forced
    rebuilds don't re-upload every page?
 
-8. **Publishing Ursa 0.103.0.** The branch is committed but not tagged or
-   pushed (pushing a `v*` tag publishes to npm). Until it's published,
-   `npm install` here needs `npm run link-ursa`.
+8. **Publishing ursa-server.** Ursa 0.103.0 is published. ursa-server
+   publishes from `.github/workflows/npm-publish.yml` when a `v*` tag matching
+   `package.json` is pushed on `main`; it needs an `NPM_TOKEN` secret.

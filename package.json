@@ -15,7 +15,7 @@
   "scripts": {
     "start": "node bin/ursa-server.js start",
     "test": "node --test --test-concurrency=1 'test/**/*.test.js'",
-    "link-ursa": "npm install --no-save ${URSA_PATH:-../ursa}"
+    "link-ursa": "node scripts/link-ursa.js"
   },
   "dependencies": {
     "@aws-sdk/client-cloudfront": "^3.700.0",
@@ -42,5 +42,11 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
   }
 }
