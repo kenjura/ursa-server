@@ -2,7 +2,8 @@
 
 A web UI for changing a site's source files, at `/edit/` on the served site.
 
-**Status:** implemented in 0.2.0 for `fs` sources. Remote sources (S3,
+**Status:** implemented in 0.2.0 for `fs` sources; visual Markdown editing
+in 0.3.0. Remote sources (S3,
 Dropbox, Drive) come with M3.
 
 ## Turning it on
@@ -25,6 +26,12 @@ auth: …               # docs/AUTH.md
   admin. Listening anywhere else without `auth` is a config error.
 - Optional: `editor.max-upload-mb` (default 50).
 
+To try it locally without setting up sign-in: `ursa-server dev [folder]`
+(default `./docs`) builds, serves and opens the folder for editing at
+http://127.0.0.1:8080/edit/, behind a test sign-in that asks only for a name
+and a role (docs/AUTH.md#mock-sign-in-for-local-testing). It changes the
+files in that folder.
+
 ## Getting there
 
 - From any page of the site: the pencil in Ursa's topbar, or "Edit this page"
@@ -38,6 +45,12 @@ auth: …               # docs/AUTH.md
 - **File tree** of the source (what the build sees: dot-files and Ursa's
   own folders are hidden). New page, new folder, upload, rename/move and
   delete work on the selected folder, or the open file's folder.
+- **Visual editor** for Markdown pages (`.md`): Gravity UI's
+  [markdown-editor](https://github.com/gravity-ui/markdown-editor), with a
+  toolbar, `/` commands, tables, definition lists and superscript. Pasted or
+  dropped files upload next to the page. The Markdown button in the top bar
+  switches to the source (unsaved changes carry over); the choice is
+  remembered in the browser. See "Visual editing" below.
 - **Text editor** (CodeMirror 6): Markdown, MDX, wikitext (`.txt`, highlighted
   as Markdown), YAML, CSS, JS, JSON and HTML. Ctrl/Cmd+S saves. Leaving with
   unsaved changes asks first.
@@ -61,9 +74,30 @@ source folder. The watcher rebuilds the page like any other change, usually
 within a second.
 
 **Not included (yet):** history or undo after saving, git commits per save,
-WYSIWYG, previewing unsaved text, presence ("someone else is editing").
+previewing unsaved text, presence ("someone else is editing").
 For history, keep the source in git and commit from time to time; see
 QUESTIONS.md for the per-save commit idea.
+
+## Visual editing
+
+The visual editor works on a document model, not on the text, so saving
+writes the page out again as Markdown. To keep that honest:
+
+- **Front matter** (`---` YAML at the top) never goes through it: it's kept
+  byte for byte and isn't shown.
+- **Opening and saving without a change keeps the file exactly as it was.**
+- When it opens a page it **checks the round trip**: if writing the page back
+  would change more than table padding and blank lines (Ursa's `:::`
+  containers, raw HTML it can't represent, unusual list markers…), a banner
+  says so, with a button to edit the Markdown instead.
+- It reads and writes CommonMark plus strikethrough, tables, definition lists
+  and `^superscript^`, which Ursa renders too. It never writes Gravity's own
+  extensions (YFM).
+- Read-only files, `.mdx` and wikitext always open in the text editor.
+
+It's React, loaded only when a Markdown page is first opened visually
+(about 5 MB, cached after the first load), and runs in an iframe at
+`/edit/wysiwyg/` so its styles and the editor's never meet.
 
 ## Principle: the editor is just another writer
 
@@ -103,6 +137,10 @@ Every change is logged with who made it: `✏️  ed@example.com saved rules/com
 
 Preact + htm + CodeMirror, bundled by esbuild (`pnpm run build:ui`, also run
 by `prepack` and the tests) into `src/editor/ui/dist`, served at `/edit/`.
+The visual editor (`src/wysiwyg.js`, React + Gravity UI) is a second bundle
+in `dist/wysiwyg/`, ESM with code-split chunks; its markdown-it dependencies
+expect Node's `punycode` and `process`, which the build aliases to their npm
+packages, and `fs`/`path`/`url`, which it stubs.
 
 **Components:** [pure-material-css](https://masquerade-circus.github.io/pure-material-css/)
 (Apache-2.0, vendored in `src/editor/ui/vendor/`; it isn't on npm). It styles

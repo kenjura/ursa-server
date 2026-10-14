@@ -64,7 +64,9 @@ export async function startServer(config, { print } = {}) {
     });
     site.attachDevServer(devServer);
     await devServer.listen();
-    out(`🌐 Serving ${site.id} at http://${config.server.host}:${devServer.port}/${access === "public" ? "" : ` (sign-in required: ${access}; ${config.auth.provider.preset ?? config.auth.provider.issuer})`}`);
+    const provider = config.auth?.provider;
+    const signIn = provider?.type === "mock" ? "test sign-in: any name, no password" : provider?.preset ?? provider?.issuer;
+    out(`🌐 Serving ${site.id} at http://${config.server.host}:${devServer.port}/${access === "public" ? "" : ` (sign-in required: ${access}; ${signIn})`}`);
     if (editing) out(`✏️  Editor at http://${config.server.host}:${devServer.port}/edit/${auth ? " (editors and admins)" : " (no sign-in: this machine only)"}`);
   }
 

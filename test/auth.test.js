@@ -47,8 +47,20 @@ test("config: auth0 needs domain, client id/secret, a long secret, and someone w
   assert.deepEqual(listed.auth.roles.viewer, ["a@x.com", "b@y.com", "c@z.com", "*@d.org"]);
 });
 
+test("config: mock sign-in needs no provider details or roles, and only runs on loopback", () => {
+  const base = { sites: [{ source: { path: "/s" } }], roles: { serve: true } };
+  const ok = normalize({ ...base, server: { access: "viewer" }, auth: { provider: { type: "mock" } } }, {}, { warn: quiet });
+  assert.equal(ok.auth.provider.type, "mock");
+  assert.ok(ok.auth.sessionSecret.length >= 32);
+  assert.throws(() => normalize({ ...base, server: { host: "0.0.0.0" }, auth: { provider: { type: "mock" } } }, {}, { warn: quiet }), /anyone sign in as anyone.*0\.0\.0\.0/);
+  assert.throws(() => normalize({ ...base, auth: { baseUrl: "https://wiki.example.com", provider: { type: "mock" } } }, {}, { warn: quiet }), /wiki\.example\.com/);
+  const warnings = [];
+  normalize({ ...base, auth: { provider: { type: "mock" } } }, {}, { warn: (m) => warnings.push(m) });
+  assert.deepEqual(warnings, [], "public site + mock (dev) is normal, not worth a warning");
+});
+
 /** An app guarded by auth, against the fake issuer; a tiny cookie-keeping browser. */
-async function setup(t, { access = "viewer", roles = { viewer: ["*@example.com"] } } = {}) {
+async function setup(t, { access = "viewer", roles = { viewer: ["*@example.com"] }, mock = false } = {}) {
   const idp = await startFakeIssuer();
   t.after(() => idp.close());
   const app = express();
@@ -58,7 +70,7 @@ async function setup(t, { access = "viewer", roles = { viewer: ["*@example.com"]
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   const auth = createAuth({
     baseUrl, sessionSecret: SECRET, sessionDays: 1, roles,
-    provider: { issuer: idp.issuer, clientId: idp.clientId, clientSecret: idp.clientSecret },
+    provider: mock ? { type: "mock" } : { issuer: idp.issuer, clientId: idp.clientId, clientSecret: idp.clientSecret },
   }, { log: quiet });
   auth.mount(app);
   app.use(auth.requireRole(access));
@@ -153,4 +165,26 @@ test("a callback without the login cookie is rejected", async (t) => {
   const res = await go(`${baseUrl}/auth/callback?code=x&state=y`);
   assert.equal(res.status, 400);
   assert.match(await res.text(), /Sign-in expired/);
+});
+
+test("mock sign-in: a name and a chosen role, no password", async (t) => {
+  const { baseUrl, go, browse, jar } = await setup(t, { mock: true, roles: {} });
+  const form = await browse(`${baseUrl}/secret/page`);
+  assert.equal(form.status, 200);
+  assert.match(form.hops.at(-1), /^\/auth\/mock\?state=/);
+  assert.match(await form.text(), /<select id="role" name="role">/);
+
+  const wrong = await go(`${baseUrl}/auth/callback?state=nope&name=pat&role=admin`);
+  assert.equal(wrong.status, 400, "a stale form is refused");
+  assert.equal(jar.has("ursa_session"), false);
+});
+
+test("mock sign-in: the role picked is the role you get; a name with @ is a verified email", async (t) => {
+  const { baseUrl, go, browse } = await setup(t, { mock: true, roles: {} });
+  const form = await browse(`${baseUrl}/secret/page`);
+  const state = (await form.text()).match(/name="state" value="([^"]+)"/)[1];
+  const res = await browse(`${baseUrl}/auth/callback?state=${state}&name=Pat@Example.com&role=editor`);
+  assert.equal(await res.text(), "hello Pat@Example.com");
+  const me = await (await go(`${baseUrl}/auth/me`, { headers: { Accept: "application/json" } })).json();
+  assert.deepEqual(me, { signedIn: true, sub: "mock|Pat@Example.com", name: "Pat@Example.com", email: "pat@example.com", roles: ["viewer", "editor"] });
 });

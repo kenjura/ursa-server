@@ -10,24 +10,53 @@ const watch = process.argv.includes("--watch");
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 
-const options = {
-  entryPoints: [new URL("src/main.js", ui).pathname],
+const common = {
   bundle: true,
   minify: !watch,
   sourcemap: watch ? "inline" : false,
-  format: "iife",
   target: ["chrome115", "firefox115", "safari17"],
-  outfile: new URL("editor.js", dist).pathname,
   legalComments: "none",
   metafile: true,
   logLevel: "info",
 };
-const result = await build(options);
+
+// The editor: Preact, CodeMirror
+const main = await build({
+  ...common,
+  entryPoints: [new URL("src/main.js", ui).pathname],
+  format: "iife",
+  outfile: new URL("editor.js", dist).pathname,
+});
+
+// The visual Markdown editor (Gravity UI, React), loaded on first use. ESM so
+// its rarely used parts (code highlighting, date locales) split into chunks.
+// Its markdown-it dependencies expect a bundler that stubs Node's built-ins.
+const nodeStubs = {
+  name: "node-stubs",
+  setup(b) {
+    b.onResolve({ filter: /^(fs|path|url)$/ }, (a) => ({ path: a.path, namespace: "node-stub" }));
+    b.onLoad({ filter: /.*/, namespace: "node-stub" }, () => ({ contents: "module.exports = {};", loader: "js" }));
+  },
+};
+const wysiwyg = await build({
+  ...common,
+  logLevel: "warning",
+  entryPoints: [new URL("src/wysiwyg.js", ui).pathname],
+  format: "esm",
+  splitting: true,
+  outdir: new URL("wysiwyg/", dist).pathname,
+  chunkNames: "chunks/[name]-[hash]",
+  assetNames: "assets/[name]-[hash]",
+  alias: { punycode: "punycode/", process: "process/browser.js" },
+  define: { "process.env.NODE_ENV": watch ? '"development"' : '"production"' },
+  loader: { ".woff": "file", ".woff2": "file", ".ttf": "file", ".svg": "file", ".png": "file" },
+  plugins: [nodeStubs],
+});
 
 // Licences of everything bundled (MIT and friends ask for their notices to travel with the code)
 const packages = new Map();
-for (const input of Object.keys(result.metafile.inputs)) {
-  const m = input.match(/^(.*node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?((?:@[^/]+\/)?[^/]+))\//);
+for (const input of [...Object.keys(main.metafile.inputs), ...Object.keys(wysiwyg.metafile.inputs)]) {
+  const m = input.replace(/^\([a-z]+\):/, "").match(/^(.*node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?((?:@[^/]+\/)?[^/]+))\//);
   if (m) packages.set(m[2], resolve(m[1]));
 }
 const notices = [];
@@ -43,5 +72,7 @@ await writeFile(new URL("THIRD_PARTY_LICENSES.txt", dist), notices.join("\n" + "
 const css = (await readFile(new URL("vendor/pure-material.css", ui), "utf8")) + "\n" + (await readFile(new URL("editor.css", ui), "utf8"));
 await writeFile(new URL("editor.css", dist), css);
 await copyFile(new URL("index.html", ui), new URL("index.html", dist));
+await copyFile(new URL("wysiwyg.html", ui), new URL("wysiwyg/index.html", dist));
 await copyFile(new URL("vendor/LICENSE-pure-material", ui), new URL("LICENSE-pure-material.txt", dist));
-console.log(`editor UI built in ${dist.pathname}`);
+const kb = (r) => Math.round(Object.values(r.metafile.outputs).reduce((n, o) => n + o.bytes, 0) / 1024);
+console.log(`editor UI built in ${dist.pathname} (editor ${kb(main)} KB, visual editor ${kb(wysiwyg)} KB loaded on demand)`);

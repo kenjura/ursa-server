@@ -8,11 +8,12 @@ people a web UI to edit it.
 
 It's meant for a machine that stays on: a home server, an EC2 instance, a VPS.
 
-**Status (0.2.0):** it watches a local folder, rebuilds incrementally with
+**Status (0.3.0):** it watches a local folder, rebuilds incrementally with
 Ursa, and deploys only changed files to a local folder, an S3-compatible
 bucket (with CloudFront invalidation) or a server over rsync. The served site
 can require an Auth0 (or any OIDC) sign-in, and signed-in editors can change
-the site in the browser at `/edit/`. There's a control API and CLI. Remote
+the site in the browser at `/edit/`, with a visual (WYSIWYG) editor for
+Markdown pages. `ursa-server dev` tries all of it locally with a test sign-in. There's a control API and CLI. Remote
 sources (S3, Dropbox, Google Drive) come next. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start
@@ -21,6 +22,7 @@ Requires Node 24+ and `@kenjura/ursa` ≥ 0.104.0.
 
 ```bash
 npm install
+npx ursa-server dev ./docs        # try it: build, serve and edit ./docs at http://127.0.0.1:8080, test sign-in (any name)
 npx ursa-server start --source ./docs --output ./site --serve   # dev: watch, build, serve with live reload
 npx ursa-server start --source ./docs --output ./site --edit    # …and edit in the browser at /edit/ (localhost only)
 ```
@@ -56,6 +58,7 @@ To run it as a service, see [infra/](infra/README.md) (systemd unit, Docker).
 ```bash
 pnpm install
 pnpm run link-ursa       # use ../ursa (or $URSA_PATH) instead of the npm package; `pnpm install` undoes it
+pnpm run dev             # ursa-server dev: this repo's docs/ as a test site, signed in as whoever you like
 pnpm test
 ```
 
@@ -102,15 +105,16 @@ pnpm test
 bin/          ursa-server executable
 docs/         design docs (start with ARCHITECTURE.md)
 src/
-  cli/        commands; all but `start` are thin control-API clients
+  cli/        commands; all but `start` and `dev` are thin control-API clients
   config/     config loading and validation
   core/       site runtime (build → deploy loop), deploy manifest, process startup
   adapters/
     source/   fs (s3, dropbox, gdrive: M3)
     sink/     fs, s3, rsync
   control/    control API (HTTP + SSE, TCP and Unix socket)
-  editor/     editor API (api.js) and UI (ui/: Preact + CodeMirror, built to ui/dist)
-  auth/       sign-in (OIDC/Auth0), sessions, roles, profile page
+  editor/     editor API (api.js) and UI (ui/: Preact + CodeMirror, and Gravity UI's
+              Markdown editor for WYSIWYG; built to ui/dist)
+  auth/       sign-in (OIDC/Auth0, or mock for local testing), sessions, roles, profile page
   util/
 test/         node:test suites (`npm test`)
 infra/

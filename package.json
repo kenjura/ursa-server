@@ -1,6 +1,6 @@
 {
   "name": "@kenjura/ursa-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Watch, rebuild, deploy, serve and edit Ursa sites",
   "author": "Andrew London <andrew@kenjura.com>",
   "license": "ISC",
@@ -14,6 +14,7 @@
   },
   "scripts": {
     "start": "node bin/ursa-server.js start",
+    "dev": "node bin/ursa-server.js dev",
     "test": "node scripts/build-ui.js && node --test --test-concurrency=1 'test/**/*.test.js'",
     "link-ursa": "node scripts/link-ursa.js",
     "build:ui": "node scripts/build-ui.js",
@@ -65,9 +66,21 @@
     "@codemirror/state": "^6.7.6",
     "@codemirror/theme-one-dark": "^6.1.3",
     "@codemirror/view": "^6.43.13",
+    "@diplodoc/cut-extension": "^1.1.7",
+    "@diplodoc/file-extension": "^0.2.6",
+    "@diplodoc/tabs-extension": "^3.10.7",
+    "@diplodoc/transform": "^4.78.7",
+    "@gravity-ui/components": "^4.24.1",
+    "@gravity-ui/markdown-editor": "^15.48.2",
+    "@gravity-ui/uikit": "^7.51.0",
     "codemirror": "^6.0.2",
     "esbuild": "^0.28.2",
     "htm": "^3.1.1",
-    "preact": "^11.0.0"
+    "markdown-it": "^13.0.2",
+    "preact": "^11.0.0",
+    "process": "^0.11.10",
+    "punycode": "^2.3.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   }
 }

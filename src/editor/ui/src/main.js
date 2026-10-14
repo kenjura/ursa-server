@@ -1,4 +1,5 @@
-// The editor UI (docs/EDITOR.md): file tree, CodeMirror, live preview.
+// The editor UI (docs/EDITOR.md): file tree, CodeMirror or the visual
+// Markdown editor, live preview.
 
 import { h, render } from "preact";
 import { useState, useEffect, useRef, useCallback } from "preact/hooks";
@@ -6,6 +7,7 @@ import htm from "htm";
 import { api, ApiError } from "./api.js";
 import { createEditor, createMerge } from "./codemirror.js";
 import { Icon } from "./icons.js";
+import { isMarkdown, resolveSourcePath } from "./markdown.js";
 
 const html = htm.bind(h);
 const dirOf = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
@@ -22,6 +24,7 @@ function App() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(() => localStorage.getItem("ursa-edit-preview") !== "off");
+  const [visual, setVisual] = useState(() => localStorage.getItem("ursa-edit-mode") !== "markdown");
   const [previewKey, setPreviewKey] = useState(0);
   const [toast, setToast] = useState(null);
   const [dialog, setDialog] = useState(null);
@@ -121,7 +124,7 @@ function App() {
     setSaving(true);
     try {
       const r = await api.save(file.path, text, file.hash);
-      setFile((f) => ({ ...f, hash: r.hash, text, url: r.url ?? f.url }));
+      setFile((f) => ({ ...f, hash: r.hash, text, draft: null, url: r.url ?? f.url }));
       setDirty(false);
       notify("Saved. The page rebuilds in a moment.");
     } catch (e) {
@@ -227,6 +230,22 @@ function App() {
     setPreview(!preview);
   };
 
+  // Markdown pages open in the visual editor unless you'd rather see the source
+  const canVisual = file && !file.binary && file.writable && isMarkdown(file.path);
+  const switchMode = (toVisual) => {
+    localStorage.setItem("ursa-edit-mode", toVisual ? "visual" : "markdown");
+    setVisual(toVisual);
+    // Unsaved text carries over into the other editor
+    const draft = editorRef.current?.text() ?? null;
+    setFile((f) => (f ? { ...f, draft, loadId: Date.now() } : f));
+  };
+  const editorProps = {
+    file,
+    editorRef,
+    onChange: (text) => setDirty(text !== file.text),
+    onSave: save,
+  };
+
   return html`
     <div class="app" data-tree=${treeOpen ? "open" : "closed"}>
       <header class="bar">
@@ -235,6 +254,7 @@ function App() {
         <span class="path" title=${file?.path ?? ""}>${file ? file.path : "Choose a file"}${dirty ? html` <span class="dot" title="Unsaved changes">●</span>` : ""}</span>
         <span class="spacer"></span>
         ${file?.url && html`<a data-button class="tool" href=${file.url} target="_blank" title="Open page"><${Icon} name="external" /></a>`}
+        ${canVisual && html`<button data-button class="tool" title=${visual ? "Edit the Markdown source" : "Edit visually"} onClick=${() => switchMode(!visual)} aria-pressed=${!visual}><${Icon} name="markdown" /></button>`}
         ${file && !file.binary && html`<button data-button class="tool" title=${preview ? "Hide preview" : "Show preview"} onClick=${togglePreview} aria-pressed=${preview}><${Icon} name="eye" /></button>`}
         ${file && !file.binary && file.writable && html`
           <button data-button="raised primary" class="save" disabled=${!dirty || saving} onClick=${save} title="Save (Ctrl+S)">
@@ -274,20 +294,31 @@ function App() {
       <main class="work" data-preview=${preview && file && !file.binary ? "on" : "off"}>
         ${!file && html`<div class="empty"><p>Pick a file on the left, or start a new page.</p></div>`}
         ${file && file.binary && html`<${BinaryView} file=${file} />`}
-        ${file && !file.binary && html`
+        ${canVisual && visual && html`
+          <${VisualEditor}
+            key=${file.path + "#" + file.loadId}
+            ...${editorProps}
+            onUpload=${async (f) => {
+              const [name] = await actions.upload([f], dirOf(file.path));
+              if (!name) throw new Error(`${f.name} wasn't uploaded`);
+              return name;
+            }}
+            onFallback=${(message) => {
+              if (message) notify(message, "error");
+              switchMode(false);
+            }}
+          />`}
+        ${file && !file.binary && !(canVisual && visual) && html`
           <${Editor}
             key=${file.path + "#" + file.loadId}
-            file=${file}
-            editorRef=${editorRef}
-            onChange=${(text) => setDirty(text !== file.text)}
-            onSave=${save}
+            ...${editorProps}
             onDropFiles=${async (files) => {
               const dir = dirOf(file.path);
               const names = await actions.upload(files, dir);
               for (const n of names) editorRef.current?.insert(IMAGE.test(n) ? `![${n.replace(/\.[^.]+$/, "")}](${n})\n` : `[${n}](${n})\n`);
             }}
-          />
-          ${preview && html`<${Preview} file=${file} reloadKey=${previewKey} />`}`}
+          />`}
+        ${file && !file.binary && preview && html`<${Preview} file=${file} reloadKey=${previewKey} />`}
       </main>
 
       ${toast && html`<div data-snackbar class=${"toast " + toast.kind} role="status" key=${toast.id}>${toast.message}</div>`}
@@ -308,7 +339,7 @@ function App() {
               const r = conflict.theirs ? await api.save(file.path, text, conflict.theirs.hash) : await api.create(file.path, text);
               setConflict(null);
               setDirty(false);
-              setFile({ ...file, text, hash: r.hash, loadId: Date.now() });
+              setFile({ ...file, text, draft: null, hash: r.hash, loadId: Date.now() });
               setPreviewKey((k) => k + 1);
               notify("Merged and saved.");
             } catch (e) {
@@ -361,7 +392,7 @@ function Editor({ file, editorRef, onChange, onSave, onDropFiles }) {
   useEffect(() => {
     const ed = createEditor(host.current, {
       path: file.path,
-      text: file.text,
+      text: file.draft ?? file.text,
       readOnly: !file.writable,
       onSave: () => saveRef.current(),
       onChange: (t) => changeRef.current(t),
@@ -390,6 +421,57 @@ function Editor({ file, editorRef, onChange, onSave, onDropFiles }) {
       onDropFiles([...e.dataTransfer.files]);
     }}
   >${!file.writable && html`<div class="readonly-note">Read-only: you can't change this file.</div>`}</section>`;
+}
+
+/**
+ * Gravity UI's markdown editor (wysiwyg.js), in an iframe of its own: it is
+ * React with its own stylesheet, and pure-material styles every bare button.
+ */
+function VisualEditor({ file, editorRef, onChange, onSave, onUpload, onFallback }) {
+  const frame = useRef(null);
+  const [rewrites, setRewrites] = useState(false);
+  const latest = useRef({});
+  latest.current = { onChange, onSave, onUpload, onFallback };
+  useEffect(() => {
+    let ed = null;
+    const start = () => {
+      const win = frame.current?.contentWindow;
+      if (!win?.createWysiwyg) return latest.current.onFallback("The visual editor didn't load; showing the Markdown instead.");
+      try {
+        ed = win.createWysiwyg(win.document.getElementById("root"), {
+          text: file.draft ?? file.text,
+          onSave: () => latest.current.onSave(),
+          onChange: (t) => latest.current.onChange(t),
+          // Files from the frame belong to its window: copy them into this one for fetch()
+          upload: async (f) => latest.current.onUpload(new File([await f.arrayBuffer()], f.name, { type: f.type })),
+          imageUrl: (src) => {
+            const p = resolveSourcePath(dirOf(file.path), src);
+            return p ? api.rawUrl(p) : src;
+          },
+        });
+      } catch (e) {
+        return latest.current.onFallback(`The visual editor failed (${e.message}); showing the Markdown instead.`);
+      }
+      editorRef.current = ed;
+      setRewrites(ed.rewrites);
+    };
+    const el = frame.current;
+    if (el.contentWindow?.createWysiwyg) start();
+    else el.addEventListener("load", start, { once: true });
+    return () => {
+      el.removeEventListener("load", start);
+      ed?.destroy();
+      if (editorRef.current === ed) editorRef.current = null;
+    };
+  }, []); // one editor per loaded file (keyed by the parent)
+  return html`<section class="editor visual">
+    ${rewrites && html`<div class="rewrite-note" role="status">
+      <span>Saving from the visual editor will rewrite parts of this page's Markdown it doesn't understand${/^---/.test(file.text) ? " (front matter is kept as is)" : ""}.</span>
+      <button data-button onClick=${() => onFallback()}>Edit as Markdown</button>
+      <button data-button class="tool" title="Dismiss" onClick=${() => setRewrites(false)}>×</button>
+    </div>`}
+    <iframe ref=${frame} src="wysiwyg/" title="Visual editor"></iframe>
+  </section>`;
 }
 
 function Preview({ file, reloadKey }) {

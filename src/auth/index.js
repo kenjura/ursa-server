@@ -16,6 +16,7 @@
 import { sign, verify, parseCookies, cookie } from "./session.js";
 import { rolesFor, hasRole } from "./roles.js";
 import { createOidcProvider } from "./providers/oidc.js";
+import { createMockProvider } from "./providers/mock.js";
 
 const SESSION_COOKIE = "ursa_session";
 const TX_COOKIE = "ursa_auth_tx";
@@ -30,7 +31,9 @@ export function createAuth(config, { log = console.log, provider = null } = {}) 
   const secure = baseUrl.startsWith("https:");
   const baseHost = new URL(baseUrl).host;
   const secret = config.sessionSecret;
-  provider ??= createOidcProvider(config.provider, { redirectUri: `${baseUrl}/auth/callback` });
+  provider ??= config.provider.type === "mock"
+    ? createMockProvider()
+    : createOidcProvider(config.provider, { redirectUri: `${baseUrl}/auth/callback` });
 
   function userOf(req) {
     const s = verify(parseCookies(req.headers.cookie)[SESSION_COOKIE], secret);
@@ -54,8 +57,9 @@ export function createAuth(config, { log = console.log, provider = null } = {}) 
 body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:12vh auto;padding:0 1rem;color:#222;background:#fff}
 a{color:#1a5fb4}dl{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem}dt{color:#666}dd{margin:0}
 button{font:inherit;padding:.4rem 1rem;border:1px solid #bbb;border-radius:4px;background:#f6f6f6;cursor:pointer}
+input,select{font:inherit;padding:.3rem .5rem;border:1px solid #bbb;border-radius:4px;background:#fff;color:inherit}
 .note{padding:.5rem .75rem;background:#eef6ee;border-radius:4px}.note.error{background:#fbeaea}.hint{color:#666;font-size:.9rem}
-@media (prefers-color-scheme:dark){body{background:#1c1c1c;color:#ddd}a{color:#8ab4f8}dt,.hint{color:#999}button{background:#2a2a2a;color:#ddd;border-color:#444}.note{background:#20321f}.note.error{background:#3a2020}}
+@media (prefers-color-scheme:dark){body{background:#1c1c1c;color:#ddd}a{color:#8ab4f8}dt,.hint{color:#999}button,input,select{background:#2a2a2a;color:#ddd;border-color:#444}.note{background:#20321f}.note.error{background:#3a2020}}
 </style></head>
 <body><h1>${esc(title)}</h1>${body}</body></html>`);
   }
@@ -72,6 +76,9 @@ button{font:inherit;padding:.4rem 1rem;border:1px solid #bbb;border-radius:4px;b
         req.user = userOf(req);
         next();
       });
+
+      // Providers with pages of their own (mock's sign-in form)
+      provider.mount?.(app, { page, esc });
 
       app.get("/auth/login", async (req, res) => {
         // Cookies belong to a host: sign in on the one the provider returns to
@@ -108,7 +115,8 @@ button{font:inherit;padding:.4rem 1rem;border:1px solid #bbb;border-radius:4px;b
           res.setHeader("Set-Cookie", clearTx);
           return page(res, 400, "Sign-in failed", `<p>${esc(e.message)}</p><p><a href="/auth/login">Try again</a></p>`);
         }
-        const roles = rolesFor(who, config.roles);
+        // The mock provider says which role was picked; real ones are looked up in auth.roles
+        const roles = who.roles ?? rolesFor(who, config.roles);
         if (roles.length === 0) {
           log(`sign-in refused: ${who.email ?? "(no email)"} [${who.sub}] has no role${who.email && !who.emailVerified ? " (email not verified, so email rules don't apply)" : ""}`);
           res.setHeader("Set-Cookie", clearTx);
@@ -159,7 +167,9 @@ ${note}
   · <a href="/auth/logout">Sign out</a>
 </p>
 ${canReset ? `<form method="post" action="/auth/profile/password-reset"><button>Email me a password reset link</button></form>` : ""}
-<p class="hint">Your name, email and sign-in method are managed by ${esc(config.provider.preset === "auth0" ? "Auth0" : "your sign-in provider")}; changes there apply the next time you sign in.</p>`);
+${config.provider.type === "mock"
+  ? `<p class="hint">Test sign-in: sign out and in again to be someone else.</p>`
+  : `<p class="hint">Your name, email and sign-in method are managed by ${esc(config.provider.preset === "auth0" ? "Auth0" : "your sign-in provider")}; changes there apply the next time you sign in.</p>`}`);
       });
 
       app.post("/auth/profile/password-reset", async (req, res) => {

@@ -38,6 +38,24 @@ as `base-url`; cookies don't carry between `localhost` and `127.0.0.1`), and
 you're sent to Auth0. `/auth/me` shows who you're signed in as and your
 roles; `/auth/logout` signs out here and at Auth0.
 
+## Mock sign-in for local testing
+
+`ursa-server dev` uses a `mock` provider: its sign-in page asks for a name
+and a role (viewer, editor, admin) and nothing else. A name with an `@` is
+also treated as a verified email, so `auth.scopes` can be tried too. To use it
+from a config file:
+
+```yaml
+server: { host: 127.0.0.1 }
+auth:
+  provider: { type: mock }   # no client id, secret or roles needed
+```
+
+Anyone who can reach it can sign in as anyone, so the config refuses it unless
+the server listens on loopback (`127.0.0.1`, `::1`, `localhost`) and
+`auth.base-url` is a localhost URL. Without `auth.session-secret` it uses a
+fixed one, so test sessions survive restarts.
+
 ## On the site: the account widget
 
 With Ursa ≥ 0.104.0, pages served by ursa-server show an account button in

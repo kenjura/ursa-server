@@ -120,3 +120,15 @@ One site, `fs` source, `fs` sink (`--output`, default `./output`). Paths are
 relative to the working directory. `--edit` (which implies `--serve`) adds
 the editor; without a config there's no sign-in, so it only works on
 localhost.
+
+For trying a site locally there's also:
+
+```bash
+ursa-server dev [folder] [--port 8080] [--access viewer] [--output ./site] [--meta ./meta]
+```
+
+The folder (default `./docs`) is watched, built (into
+`.ursa-server/dev/<folder name>/` unless `--output` says otherwise), served
+on 127.0.0.1 and editable at `/edit/`, behind a test sign-in that asks only
+for a name and a role (`auth.provider.type: mock`, docs/AUTH.md). `--access`
+says who may see the site; editing always needs editor.

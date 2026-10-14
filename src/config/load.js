@@ -116,10 +116,17 @@ export function normalize(raw, flags = {}, { base = process.cwd(), cwd = process
   if (server.site && !ids.has(server.site)) throw new ConfigError(`server.site: no site "${server.site}"`);
 
   const auth = raw.auth ? normalizeAuth(raw.auth, server, v) : null;
+  if (auth?.provider.type === "mock") {
+    // Anyone who can reach a mock sign-in can be anyone
+    const baseHost = new URL(auth.baseUrl).hostname;
+    if (!isLoopback(server.host) || !isLoopback(baseHost)) {
+      throw new ConfigError(`auth.provider.type mock lets anyone sign in as anyone: only on server.host 127.0.0.1 (and a localhost base-url), not ${isLoopback(server.host) ? auth.baseUrl : server.host}`);
+    }
+  }
   if (server.access !== "public" && !auth) {
     throw new ConfigError(`server.access is "${server.access}", which needs an \`auth\` section`);
   }
-  if (auth && server.access === "public" && roles.serve) {
+  if (auth && server.access === "public" && roles.serve && auth.provider.type !== "mock") {
     warn("config: auth is configured but server.access is public, so the site is served without sign-in");
   }
 
@@ -135,21 +142,25 @@ export function normalize(raw, flags = {}, { base = process.cwd(), cwd = process
 }
 
 const MIN_SECRET = 32;
+// Mock sign-in is loopback-only and lets anyone in, so a fixed secret costs nothing
+// and keeps test sessions across restarts
+const MOCK_SECRET = "ursa-server mock sign-in, for local testing only";
 
 function normalizeAuth(a, server, v) {
   v.object(a, "auth", ["baseUrl", "sessionSecret", "sessionDays", "provider", "roles", "scopes"]);
-  const secret = v.string(a.sessionSecret, "auth.session-secret");
+  const p = a.provider;
+  if (!p) throw new ConfigError("auth.provider: required");
+  const type = v.oneOf(p.type, "auth.provider.type", ["oidc", "mock"]) ?? "oidc";
+  const mock = type === "mock";
+  const secret = v.string(a.sessionSecret, "auth.session-secret") ?? (mock ? MOCK_SECRET : undefined);
   if (!secret || secret.length < MIN_SECRET) {
     throw new ConfigError(`auth.session-secret: required, at least ${MIN_SECRET} characters (e.g. \`openssl rand -base64 48\`)`);
   }
-  const p = a.provider;
-  if (!p) throw new ConfigError("auth.provider: required");
-  v.object(p, "auth.provider", ["type", "preset", "issuer", "domain", "clientId", "clientSecret", "scope", "region", "userPoolId", "connection"]);
-  const type = v.oneOf(p.type, "auth.provider.type", ["oidc"]) ?? "oidc";
+  v.object(p, "auth.provider", mock ? ["type"] : ["type", "preset", "issuer", "domain", "clientId", "clientSecret", "scope", "region", "userPoolId", "connection"]);
   const preset = v.oneOf(p.preset, "auth.provider.preset", ["auth0", "google", "cognito"]) ?? null;
-  if (!preset && !p.issuer) throw new ConfigError("auth.provider: give `preset` (auth0, google, cognito) or `issuer`");
+  if (!mock && !preset && !p.issuer) throw new ConfigError("auth.provider: give `preset` (auth0, google, cognito) or `issuer`");
   if (preset === "auth0" && !p.domain) throw new ConfigError("auth.provider.domain: required for auth0 (e.g. your-tenant.us.auth0.com)");
-  for (const k of ["clientId", "clientSecret"]) {
+  for (const k of mock ? [] : ["clientId", "clientSecret"]) {
     if (!v.string(p[k], `auth.provider.${kebab(k)}`)) throw new ConfigError(`auth.provider.${kebab(k)}: required`);
   }
 
@@ -161,7 +172,8 @@ function normalizeAuth(a, server, v) {
     // environment variable can carry a whole list
     roleRules[r] = (v.stringArray(rolesRaw[r], `auth.roles.${r}`) ?? []).flatMap((e) => e.split(/[\s,]+/)).filter(Boolean);
   }
-  if (!Object.values(roleRules).some((l) => l.length)) {
+  // (mock: everyone picks a role at sign-in)
+  if (!mock && !Object.values(roleRules).some((l) => l.length)) {
     throw new ConfigError("auth.roles: nobody has a role, so nobody could sign in (e.g. admin: [you@example.com])");
   }
 
@@ -272,7 +284,7 @@ function normalizePrefix(p) {
 }
 
 function isLoopback(host) {
-  return host === "127.0.0.1" || host === "::1" || host === "localhost";
+  return host === "127.0.0.1" || host === "::1" || host === "[::1]" || host === "localhost";
 }
 
 // ---------------------------------------------------------------------------

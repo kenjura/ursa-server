@@ -1,13 +1,14 @@
 /**
- * `ursa-server` CLI. `start` runs the server; every other command is one call
- * to the control API of a running server (docs/CONTROL.md).
+ * `ursa-server` CLI. `start` runs the server and `dev` runs one for trying a
+ * site locally; every other command is one call to the control API of a
+ * running server (docs/CONTROL.md).
  */
 
-import { existsSync } from "fs";
-import { dirname, join, resolve } from "path";
+import { existsSync, statSync } from "fs";
+import { basename, dirname, join, resolve } from "path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { loadConfig, ConfigError } from "../config/load.js";
+import { loadConfig, normalize, ConfigError } from "../config/load.js";
 import { startServer, VERSION } from "../core/server.js";
 import { createClient, readEvents, ClientError } from "./client.js";
 
@@ -43,6 +44,19 @@ export async function main(argv) {
         .option("control-port", { type: "number", describe: "Control API port" })
         .option("state-dir", { type: "string", describe: "Where caches and deploy state live" }),
       start,
+    )
+    .command(
+      "dev [root]",
+      "Try a site locally: build, serve and edit it, with a test sign-in (any name, no password)",
+      (y) => y
+        .positional("root", { type: "string", default: "docs", describe: "Source folder" })
+        .option("port", { type: "number", default: 8080, describe: "Port (on 127.0.0.1)" })
+        .option("access", { choices: ["public", "viewer", "editor", "admin"], default: "viewer", describe: "Who may see the site (editing always needs editor)" })
+        .option("output", { type: "string", describe: "Build into this folder (default: in the state dir)" })
+        .option("meta", { type: "string", describe: "Templates folder (default: Ursa's own)" })
+        .option("control-port", { type: "number", describe: "Control API port (default 7071)" })
+        .option("state-dir", { type: "string", describe: "Where caches live (default ./.ursa-server)" }),
+      dev,
     )
     .command("status", "Show what the server is doing", {}, run(status))
     .command(
@@ -123,6 +137,33 @@ async function start(a) {
     controlPort: a.controlPort,
     stateDir: a.stateDir,
   });
+  await serve(config);
+}
+
+/** `dev`: one fs site, watched, served and editable, behind mock sign-in. */
+async function dev(a) {
+  const root = resolve(a.root);
+  if (!existsSync(root) || !statSync(root).isDirectory()) throw new ConfigError(`${a.root}: no such folder`);
+  if (a.envFile) loadEnv(a, null);
+  const stateDir = resolve(a.stateDir ?? ".ursa-server");
+  const id = basename(root).replace(/[^a-z0-9_-]+/gi, "-").replace(/^[-_]+/, "") || "dev";
+  const config = normalize({
+    stateDir,
+    roles: { watch: true, serve: true, edit: true },
+    server: { host: "127.0.0.1", port: a.port, access: a.access },
+    control: { port: a.controlPort },
+    sites: [{
+      id,
+      ursa: a.meta ? { meta: resolve(a.meta) } : {},
+      source: { type: "fs", path: root },
+      sink: { type: "fs", path: a.output ? resolve(a.output) : join(stateDir, "dev", id) },
+    }],
+    auth: { provider: { type: "mock" } },
+  });
+  await serve(config);
+}
+
+async function serve(config) {
   const server = await startServer(config);
   let stopping = false;
   const stop = async (signal) => {
